@@ -8,6 +8,6 @@
   };
 
   targets = { lib, ... }: {
-    default = ./sample.json;
+    default = lib.llb.image "docker.io/library/ubuntu";
   };
 }

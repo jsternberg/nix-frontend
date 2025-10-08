@@ -31,7 +31,7 @@ FROM alpine:${ALPINE_VERSION} AS alpine-base
 
 FROM alpine-base AS nix-runner
 RUN apk add --no-cache nix
-COPY --from=binaries /marshal /bin/
+COPY --from=binaries /marshal /mkop /bin/
 RUN --mount=target=/src/nix/channels/dockerfile,source=./nix/dockerfile \
     --mount=target=/src/nix/profile/bin,source=./nix/bin <<EOT
   set -e
