@@ -1,0 +1,53 @@
+#!/bin/sh
+
+set -e
+
+TARGET="default"
+FILE="/etc/dockerfile.nix"
+OUTPUT="result"
+ARG_FILE=""
+
+OPTIONS=$(getopt -o t:f:o:a: --long target:,file:,output:,arg-file: -- "$@")
+if [ $? -ne 0 ]; then
+    echo "Incorrect options provided"
+    exit 1
+fi
+
+eval set -- "$OPTIONS"
+
+while true; do
+    case "$1" in
+        -t|--target)
+            TARGET="$2"
+            shift 2
+            ;;
+        -f|--file)
+            FILE="$2"
+            shift 2
+            ;;
+        -o|--output)
+            OUTPUT="$2"
+            shift 2
+            ;;
+        -a|--arg-file)
+            ARG_FILE="$2"
+            shift 2
+            ;;
+        --)
+            shift
+            break
+            ;;
+        *)
+            echo "Invalid option: $1"
+            exit 1
+            ;;
+    esac
+done
+
+cmd="nix-build <dockerfile> --argstr configuration ${FILE} -A config.build.targets.${TARGET} -o /tmp/result"
+if [[ -n "${ARG_FILE}" ]]; then
+  cmd+=" --argstr ${ARG_FILE}"
+fi
+
+${cmd}
+cp /tmp/result "${OUTPUT}"
