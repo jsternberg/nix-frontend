@@ -1,0 +1,17 @@
+#!/bin/sh
+
+set -e -o pipefail
+
+ROOT=$(git rev-parse --show-toplevel)
+(
+  cd $ROOT
+  mkdir -p /tmp/nix-frontend
+  go build -o /tmp/nix-frontend/ ./cmd/...
+)
+
+export NIX_PATH=dockerfile=$ROOT/nix/dockerfile
+export NIX_CONFIG="
+extra-sandbox-paths = /bin/marshal=/tmp/nix-frontend/marshal /bin/mkop=/tmp/nix-frontend/mkop
+"
+
+exec $ROOT/nix/bin/nix-solve "$@"
