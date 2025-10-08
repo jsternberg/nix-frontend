@@ -3,10 +3,13 @@ module github.com/jsternberg/nix-frontend
 go 1.25.0
 
 require (
+	github.com/distribution/reference v0.6.0
 	github.com/moby/buildkit v0.25.1
+	github.com/moby/docker-image-spec v1.3.1
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/urfave/cli/v2 v2.27.7
+	golang.org/x/sync v0.16.0
 	google.golang.org/protobuf v1.36.9
 )
 
@@ -18,7 +21,6 @@ require (
 	github.com/containerd/ttrpc v1.2.7 // indirect
 	github.com/containerd/typeurl/v2 v2.2.3 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
-	github.com/distribution/reference v0.6.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -48,7 +50,6 @@ require (
 	go.opentelemetry.io/otel/trace v1.35.0 // indirect
 	golang.org/x/crypto v0.37.0 // indirect
 	golang.org/x/net v0.39.0 // indirect
-	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/text v0.24.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250218202821-56aae31c358a // indirect
