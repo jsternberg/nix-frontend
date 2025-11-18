@@ -21,6 +21,7 @@ target "_common" {
     ALPINE_VERSION = ALPINE_VERSION
     GO_VERSION = GO_VERSION
   }
+  dockerfile = "build.Dockerfile"
 }
 
 target "nix-runner" {
