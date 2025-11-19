@@ -11,9 +11,8 @@
     alpine.version = "3.20";
   };
 
-  targets = { lib, ... }@inputs:
+  targets = { lib, golang, ... }:
   let
-    golang = import <golang> inputs;
     targets = golang.build {};
   in
   targets;

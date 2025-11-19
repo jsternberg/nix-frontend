@@ -22,18 +22,30 @@ let
 
   inputs = let
     f = config.inputs or (x: {});
-    inputs = f allArgs;
+  in
+    f allArgs;
+
+  mappedInputs = let
     mapped = builtins.mapAttrs (name: lib.llb.marshal) inputs;
   in
     lib.llb.inputs mapped;
 
   targets = let
     f = config.targets;
-    inputs = f allArgs;
+    inputNames = builtins.attrNames inputs;
+    importByName = name: {
+      inherit name;
+      value = import (builtins.findFile builtins.nixPath name) allArgs;
+    };
+    withImports = allArgs // builtins.listToAttrs (builtins.map importByName inputNames);
+    targets = f withImports;
   in
-    builtins.mapAttrs (name: lib.llb.marshal) inputs;
+    builtins.mapAttrs (name: lib.llb.marshal) targets;
 
-  finalConfig = config // { inherit inputs targets; };
+  finalConfig = config // {
+    inherit targets;
+    inputs = mappedInputs;
+  };
 in
 {
   config.build = finalConfig;
