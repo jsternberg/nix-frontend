@@ -41,3 +41,31 @@ The `dockerfile.nix` file is the definition of your build. It is of the format:
   };
 }
 ```
+
+Other build files written in Nix may also be injected to the script through the `inputs` parameter.
+
+```nix
+{ myBuildArg ? null, myOtherBuildArg ? null }:
+
+{
+  inputs = { lib, ... }:
+  {
+    golang = lib.llb.image "docker.io/jsternberg/dockerfile-golang";
+  };
+
+  targets = { std, golang, ... }:
+  let
+    project = golang.build {};
+  in
+  {
+    // Only interested in the binaries target.
+    inherit (project) binaries;
+    default = std.alpine.system {
+      systemPackages = ["ca-certificates"];
+      packages = [binaries];
+    };
+  }
+}
+```
+
+Imported inputs may be from any source supported by Buildkit. This may be from an image, a git repository, an http source, or even your local context. This library will then be injected as an argument to the function defined on `targets` and usable within the dockerfile.
