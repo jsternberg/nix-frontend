@@ -59,6 +59,16 @@ rec {
         then make {} optsOrCommand
         else make optsOrCommand;
 
+  inputs = spec: derivation {
+    name = "llb-inputs.json";
+    inherit system;
+    builder = "/bin/readinputs";
+    args = [ "$specPath" "$out" ];
+
+    spec = builtins.toJSON spec;
+    passAsFile = ["spec"];
+  };
+
   marshal = input: derivation {
     name = "llb-def.json";
     inherit system;

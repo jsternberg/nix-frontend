@@ -3,6 +3,10 @@
 { goVersion ? null, alpineVersion ? null }:
 
 {
+  inputs = { lib, ... }: {
+    golang = lib.llb.image "docker.io/jsternberg/dockerfile-golang";
+  };
+
   config = {
     alpine.version = "3.20";
   };

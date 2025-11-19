@@ -20,13 +20,20 @@ let
   in
     f filteredArgs;
 
+  inputs = let
+    f = config.inputs or (x: {});
+    inputs = f allArgs;
+    mapped = builtins.mapAttrs (name: lib.llb.marshal) inputs;
+  in
+    lib.llb.inputs mapped;
+
   targets = let
     f = config.targets;
     inputs = f allArgs;
   in
     builtins.mapAttrs (name: lib.llb.marshal) inputs;
 
-  finalConfig = config // { inherit targets; };
+  finalConfig = config // { inherit inputs targets; };
 in
 {
   config.build = finalConfig;

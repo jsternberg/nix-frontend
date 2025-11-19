@@ -11,7 +11,7 @@ ROOT=$(git rev-parse --show-toplevel)
 
 export NIX_PATH=dockerfile=$ROOT/nix/dockerfile
 export NIX_CONFIG="
-extra-sandbox-paths = /bin/marshal=/tmp/nix-frontend/marshal /bin/mkop=/tmp/nix-frontend/mkop
+extra-sandbox-paths = /bin/marshal=/tmp/nix-frontend/marshal /bin/mkop=/tmp/nix-frontend/mkop /bin/readinputs=/tmp/nix-frontend/readinputs
 "
 
 exec $ROOT/nix/bin/nix-solve "$@"
