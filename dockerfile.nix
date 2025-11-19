@@ -11,9 +11,13 @@
     alpine.version = "3.20";
   };
 
-  targets = { lib, golang, ... }:
+  targets = { lib, std, golang, ... }:
   let
     targets = golang.build {};
   in
-  targets;
+  targets // (with targets; {
+    frontend = std.alpine.system {
+      systemPackages = ["curl"];
+    };
+  });
 }

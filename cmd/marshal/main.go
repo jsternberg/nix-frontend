@@ -101,9 +101,11 @@ func convert(specs map[string]*Vertex, order []string) (*pb.Definition, error) {
 			Digest: string(digest.FromBytes(b)),
 		}
 		if v.Meta == nil {
-			v.Meta = &dockerfile.Metadata{
-				Description: map[string]string{},
-			}
+			v.Meta = &dockerfile.Metadata{}
+		}
+
+		if v.Meta.Description == nil {
+			v.Meta.Description = map[string]string{}
 		}
 
 		src, _ := protojson.Marshal(v.Op)

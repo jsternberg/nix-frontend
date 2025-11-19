@@ -33,6 +33,7 @@ FROM alpine-base AS nix-runner
 RUN apk add --no-cache nix
 COPY --from=binaries /marshal /mkop /readinputs /bin/
 RUN --mount=target=/src/nix/channels/dockerfile,source=./nix/dockerfile \
+    --mount=target=/src/nix/channels/std,source=./nix/std \
     --mount=target=/src/nix/profile/bin,source=./nix/bin <<EOT
   set -e
   nix-env -i $(nix-store --add /src/nix/channels) -p /nix/var/nix/profiles/per-user/root/channels

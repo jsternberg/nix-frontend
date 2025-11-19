@@ -7,13 +7,17 @@
 let
   lib = {
     llb = import ./llb { inherit system; };
+    optional = x: y: if x then y else (x: x);
   };
 
   args = if argsfile != null
     then builtins.fromJSON argsfile
     else {};
 
-  allArgs = args // { inherit lib args; };
+  allArgs = args // {
+    inherit lib args;
+    config = config.config or {};
+  };
   config = let
     f = import configuration;
     filteredArgs = builtins.intersectAttrs (builtins.functionArgs f) args;
@@ -37,7 +41,11 @@ let
       inherit name;
       value = import (builtins.findFile builtins.nixPath name) allArgs;
     };
-    withImports = allArgs // builtins.listToAttrs (builtins.map importByName inputNames);
+    defaultImports.std = import <std> allArgs;
+    userImports = builtins.listToAttrs (builtins.map importByName inputNames);
+    withImports = allArgs
+      // defaultImports
+      // userImports;
     targets = f withImports;
   in
     builtins.mapAttrs (name: lib.llb.marshal) targets;
