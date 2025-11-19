@@ -40,6 +40,9 @@ RUN --mount=target=/src/nix/channels/dockerfile,source=./nix/dockerfile \
 EOT
 ENV PATH="/nix/var/nix/profiles/per-user/root/profile/bin:$PATH"
 
+FROM scratch AS library-golang
+COPY ./nix/golang /
+
 FROM alpine-base AS frontend
 COPY --from=binaries frontend /bin/
 ENTRYPOINT ["/bin/frontend"]

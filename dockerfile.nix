@@ -4,43 +4,17 @@
 
 {
   inputs = { lib, ... }: {
-    golang = lib.llb.image "docker.io/jsternberg/dockerfile-golang";
+    golang = lib.llb.image "docker.io/jsternberg/dockerfile-golang:latest";
   };
 
   config = {
     alpine.version = "3.20";
   };
 
-  targets = { lib, ... }:
+  targets = { lib, ... }@inputs:
   let
-    golangImage = lib.llb.image "docker.io/library/golang:1.25-alpine3.21";
-
-    packages = [ "./cmd/..." ];
-    buildCommand = [ "go" "build" "-o" "/out" ] ++ packages;
-    doBuild = lib.llb.run {
-      env.CGO_ENABLED = "0";
-      workdir = "/app";
-
-      mounts = {
-        "/app".input = lib.llb.local "context" {};
-        "/root/.cache/go-build".type = "cache";
-        "/go/pkg/mod".type = "cache";
-        "/out" = {};
-      };
-
-      meta.description = {
-        "llb.customname" = "go build ${builtins.concatStringsSep " " packages}";
-      };
-    } buildCommand;
-
-    buildStage = doBuild golangImage;
+    golang = import <golang> inputs;
+    targets = golang.build {};
   in
-  rec {
-    binaries = {
-      outPath = "${buildStage}/out";
-      meta.installPrefix = "/bin";
-    };
-
-    default = binaries;
-  };
+  targets;
 }

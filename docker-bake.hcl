@@ -36,6 +36,12 @@ target "frontend" {
   target = "frontend"
 }
 
+target "libraries" {
+  inherits = ["_common"]
+  tags = ["docker.io/jsternberg/dockerfile-golang:${VERSION}"]
+  target = "library-golang"
+}
+
 group "default" {
-  targets = ["nix-runner", "frontend"]
+  targets = ["nix-runner", "frontend", "libraries"]
 }

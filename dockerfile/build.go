@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -54,6 +55,16 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 				llb.Mkfile("args.json", 0444, args),
 			)
 		runOpts = append(runOpts, llb.AddMount("/inputs", inputs, llb.Readonly))
+	}
+
+	inputs, err := resolveInputs(ctx, c)
+	if err != nil {
+		return nil, err
+	}
+
+	for k, st := range inputs {
+		dest := filepath.Join("/nix/var/nix/profiles/per-user/root/channels", k)
+		runOpts = append(runOpts, llb.AddMount(dest, st))
 	}
 
 	imageRef := fmt.Sprintf("%s:%s-nix", Repository, Version)
@@ -237,6 +248,70 @@ func resolveImageConfigs(ctx context.Context, c client.Client, gr *graph) (map[s
 		out[k.(string)] = v.(*Image)
 	}
 	return out, nil
+}
+
+func resolveInputs(ctx context.Context, c client.Client) (map[string]llb.State, error) {
+	runArgs := []string{
+		"nix-resolve-inputs",
+		"-f", "/src/dockerfile.nix",
+		"-o", "/result/inputs.json",
+	}
+
+	runOpts := []llb.RunOption{
+		llb.WithCustomNamef("[dockerfile] resolving inputs for %s", "dockerfile.nix"),
+		llb.Args(runArgs),
+		llb.AddMount("/src", llb.Local("dockerfile", llb.FollowPaths([]string{"dockerfile.nix"}))),
+	}
+
+	imageRef := fmt.Sprintf("%s:%s-nix", Repository, Version)
+	st := llb.Image(imageRef, llb.WithMetaResolver(c)).
+		Run(runOpts...).
+		AddMount("/result", llb.Scratch())
+
+	def, err := st.Marshal(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	req := client.SolveRequest{
+		Definition: def.ToPB(),
+	}
+	res, err := c.Solve(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	ref, err := res.SingleRef()
+	if err != nil {
+		return nil, err
+	}
+
+	in, err := ref.ReadFile(ctx, client.ReadRequest{
+		Filename: "inputs.json",
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	rawInputs := map[string]json.RawMessage{}
+	if err := json.Unmarshal(in, &rawInputs); err != nil {
+		return nil, err
+	}
+
+	inputMap := make(map[string]llb.State, len(rawInputs))
+	for k, b := range rawInputs {
+		def := &pb.Definition{}
+		if err := protojson.Unmarshal(b, def); err != nil {
+			return nil, err
+		}
+
+		op, err := llb.NewDefinitionOp(def)
+		if err != nil {
+			return nil, err
+		}
+		inputMap[k] = llb.NewState(op)
+	}
+	return inputMap, nil
 }
 
 func getBuildArgs(c client.Client) map[string]string {
