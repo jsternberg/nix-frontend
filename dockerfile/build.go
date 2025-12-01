@@ -170,6 +170,7 @@ func resolveImages(ctx context.Context, c client.Client, gr *graph) (*dockerspec
 						if o.Exec.Meta.User == "" {
 							o.Exec.Meta.User = config.User
 						}
+						imgs[string(dgst)] = img
 						break
 					}
 				}
