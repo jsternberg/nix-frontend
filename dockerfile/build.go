@@ -27,6 +27,12 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		target = "default"
 	}
 
+	debug := false
+	if strings.HasPrefix(target, "debug:") {
+		debug = true
+		target = strings.TrimPrefix(target, "debug:")
+	}
+
 	runArgs := []string{
 		"nix-solve",
 		"-f", "/src/dockerfile.nix",
@@ -52,7 +58,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 
 		inputs := llb.Scratch().
 			File(
-				llb.Mkfile("args.json", 0444, args),
+				llb.Mkfile("args.json", 0o444, args),
 			)
 		runOpts = append(runOpts, llb.AddMount("/inputs", inputs, llb.Readonly))
 	}
@@ -115,6 +121,10 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 	outDef, err = gr.ToDef()
 	if err != nil {
 		return nil, err
+	}
+
+	if debug {
+		return buildDebugOutput(ctx, c, outDef)
 	}
 
 	res, err = c.Solve(ctx, client.SolveRequest{
