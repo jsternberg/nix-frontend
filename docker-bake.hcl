@@ -1,11 +1,3 @@
-variable "REPOSITORY" {
-  default = "docker.io/jsternberg/dockerfile-nix"
-}
-
-variable "VERSION" {
-  default = "latest"
-}
-
 variable "ALPINE_VERSION" {
   default = null
 }
@@ -18,8 +10,6 @@ target "docker-metadata-action" {}
 
 target "_common" {
   args = {
-    REPOSITORY = REPOSITORY
-    VERSION = VERSION
     ALPINE_VERSION = ALPINE_VERSION
     GO_VERSION = GO_VERSION
   }
@@ -29,7 +19,7 @@ target "_common" {
 
 target "frontend" {
   inherits = ["_common"]
-  tags = ["docker.io/jsternberg/dockerfile-nix:${VERSION}"]
+  tags = ["docker.io/jsternberg/dockerfile-nix"]
   target = "frontend"
 }
 
@@ -40,7 +30,7 @@ target "libraries" {
   }
   target = "library-${language}"
   inherits = ["_common"]
-  tags = ["docker.io/jsternberg/dockerfile-${language}:${VERSION}"]
+  tags = ["docker.io/jsternberg/dockerfile-${language}"]
 }
 
 group "default" {
