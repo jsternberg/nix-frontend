@@ -21,7 +21,19 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
+const PATH = "/nix/var/nix/profiles/per-user/root/profile/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
 func Build(ctx context.Context, c client.Client) (*client.Result, error) {
+	var frontendImg llb.State
+	if cc, ok := c.(cf); ok {
+		baseImg, err := cc.CurrentFrontend()
+		if err != nil {
+			return nil, fmt.Errorf("unable to determine current frontend: %w", err)
+		}
+
+		frontendImg = baseImg.AddEnv("PATH", PATH)
+	}
+
 	target := c.BuildOpts().Opts["target"]
 	if target == "" {
 		target = "default"
@@ -63,7 +75,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		runOpts = append(runOpts, llb.AddMount("/inputs", inputs, llb.Readonly))
 	}
 
-	inputs, err := resolveInputs(ctx, c)
+	inputs, err := resolveInputs(ctx, c, frontendImg)
 	if err != nil {
 		return nil, err
 	}
@@ -73,8 +85,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		runOpts = append(runOpts, llb.AddMount(dest, st))
 	}
 
-	imageRef := fmt.Sprintf("%s:%s-nix", Repository, Version)
-	st := llb.Image(imageRef, llb.WithMetaResolver(c)).
+	st := frontendImg.
 		Run(runOpts...).
 		AddMount("/result", llb.Scratch())
 
@@ -261,7 +272,7 @@ func resolveImageConfigs(ctx context.Context, c client.Client, gr *graph) (map[s
 	return out, nil
 }
 
-func resolveInputs(ctx context.Context, c client.Client) (map[string]llb.State, error) {
+func resolveInputs(ctx context.Context, c client.Client, frontendImg llb.State) (map[string]llb.State, error) {
 	runArgs := []string{
 		"nix-resolve-inputs",
 		"-f", "/src/dockerfile.nix",
@@ -274,8 +285,7 @@ func resolveInputs(ctx context.Context, c client.Client) (map[string]llb.State, 
 		llb.AddMount("/src", llb.Local("dockerfile", llb.FollowPaths([]string{"dockerfile.nix"}))),
 	}
 
-	imageRef := fmt.Sprintf("%s:%s-nix", Repository, Version)
-	st := llb.Image(imageRef, llb.WithMetaResolver(c)).
+	st := frontendImg.
 		Run(runOpts...).
 		AddMount("/result", llb.Scratch())
 
@@ -347,4 +357,8 @@ func toLowerCamelCase(s string) string {
 	return lowerCamelCase().ReplaceAllStringFunc(strings.ToLower(s), func(s string) string {
 		return strings.ToUpper(s[1:])
 	})
+}
+
+type cf interface {
+	CurrentFrontend() (*llb.State, error)
 }

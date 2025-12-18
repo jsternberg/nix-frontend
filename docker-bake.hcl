@@ -24,12 +24,6 @@ target "_common" {
   dockerfile = "build.Dockerfile"
 }
 
-target "nix-runner" {
-  inherits = ["_common"]
-  tags = ["docker.io/jsternberg/dockerfile-nix:${VERSION}-nix"]
-  target = "nix-runner"
-}
-
 target "frontend" {
   inherits = ["_common"]
   tags = ["docker.io/jsternberg/dockerfile-nix:${VERSION}"]
@@ -47,5 +41,5 @@ target "libraries" {
 }
 
 group "default" {
-  targets = ["nix-runner", "frontend", "libraries"]
+  targets = ["frontend", "libraries"]
 }
