@@ -14,6 +14,8 @@ variable "GO_VERSION" {
   default = null
 }
 
+target "docker-metadata-action" {}
+
 target "_common" {
   args = {
     REPOSITORY = REPOSITORY
@@ -22,6 +24,7 @@ target "_common" {
     GO_VERSION = GO_VERSION
   }
   dockerfile = "build.Dockerfile"
+  inherits = ["docker-metadata-action"]
 }
 
 target "frontend" {
