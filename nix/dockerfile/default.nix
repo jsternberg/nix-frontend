@@ -39,14 +39,14 @@ let
     inputNames = builtins.attrNames inputs;
     importByName = name: {
       inherit name;
-      value = import (builtins.findFile builtins.nixPath name) allArgs;
+      value = import (builtins.findFile builtins.nixPath name) withImports;
     };
     defaultImports.std = import <std> allArgs;
     userImports = builtins.listToAttrs (builtins.map importByName inputNames);
-    withImports = allArgs
-      // defaultImports
-      // userImports;
-    targets = f withImports;
+
+    withImports = allArgs // defaultImports;
+    withAllImports = withImports // userImports;
+    targets = f withAllImports;
   in
     builtins.mapAttrs (name: lib.llb.marshal) targets;
 

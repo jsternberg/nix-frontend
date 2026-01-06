@@ -23,6 +23,10 @@ rec {
     };
   };
 
+  git = url: mkOp "source" {
+    source.identifier = "git://${url}";
+  };
+
   image = name: mkOp "source" {
     source.identifier = "docker-image://${name}";
   };
