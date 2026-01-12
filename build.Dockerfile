@@ -26,6 +26,7 @@ RUN --mount=target=/src/nix/channels/dockerfile,source=./nix/dockerfile \
     --mount=target=/src/nix/channels/std,source=./nix/std \
     --mount=target=/src/nix/profile/bin,source=./nix/bin <<EOT
   set -e
+  echo 'filter-syscalls = false' >> /etc/nix/nix.conf
   nix-env -i $(nix-store --add /src/nix/channels) -p /nix/var/nix/profiles/per-user/root/channels
   nix-env -i $(nix-store --add /src/nix/profile) -p /nix/var/nix/profiles/per-user/root/profile
 EOT
