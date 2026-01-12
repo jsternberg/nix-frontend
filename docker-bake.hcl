@@ -6,7 +6,9 @@ variable "GO_VERSION" {
   default = null
 }
 
-target "docker-metadata-action" {}
+target "meta-helper" {
+  tags = ["docker.io/jsternberg/dockerfile-nix:local"]
+}
 
 target "_common" {
   args = {
@@ -14,12 +16,10 @@ target "_common" {
     GO_VERSION = GO_VERSION
   }
   dockerfile = "build.Dockerfile"
-  inherits = ["docker-metadata-action"]
 }
 
 target "frontend" {
-  inherits = ["_common"]
-  tags = ["docker.io/jsternberg/dockerfile-nix"]
+  inherits = ["_common", "meta-helper"]
   target = "frontend"
 }
 
