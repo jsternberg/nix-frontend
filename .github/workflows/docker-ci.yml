@@ -16,7 +16,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            docker.io/jsternberg/nix-frontend
+            docker.io/jsternberg/dockerfile-nix
           tags: |
             type=ref,event=branch
             type=ref,event=pr
