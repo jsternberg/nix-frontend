@@ -1,4 +1,4 @@
-{ lib, ... }:
+{ lib, config, ... }:
 
 rec {
   image = lib.llb.image "docker.io/library/golang:1.25-alpine3.21";

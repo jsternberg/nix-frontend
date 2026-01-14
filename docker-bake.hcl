@@ -23,16 +23,6 @@ target "frontend" {
   target = "frontend"
 }
 
-target "libraries" {
-  name = "library-${language}"
-  matrix = {
-    language = ["golang"]
-  }
-  target = "library-${language}"
-  inherits = ["_common"]
-  tags = ["docker.io/jsternberg/dockerfile-${language}"]
-}
-
 group "default" {
-  targets = ["frontend", "libraries"]
+  targets = ["frontend"]
 }
