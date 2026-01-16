@@ -47,6 +47,15 @@ func mkop(d string, infile string) error {
 		return errors.New("invalid operation spec")
 	}
 
+	if p := spec.Platform; p != nil {
+		op.Platform = &pb.Platform{
+			Architecture: p.Architecture,
+			OS:           p.OS,
+			Variant:      p.Variant,
+			OSVersion:    p.OSVersion,
+		}
+	}
+
 	v := &dockerfile.Vertex{
 		Op: op,
 	}
@@ -73,7 +82,7 @@ func mkop(d string, infile string) error {
 			}
 
 			fpath := filepath.Join(d, strconv.FormatInt(mount.Output, 10))
-			if err := os.Mkdir(fpath, 0755); err != nil && !os.IsExist(err) {
+			if err := os.Mkdir(fpath, 0o755); err != nil && !os.IsExist(err) {
 				return err
 			}
 
@@ -107,7 +116,7 @@ func WriteJSON(v any, paths ...string) error {
 	}
 
 	fpath := filepath.Join(paths...)
-	return os.WriteFile(fpath, data, 0644)
+	return os.WriteFile(fpath, data, 0o644)
 }
 
 func main() {
@@ -126,7 +135,7 @@ func main() {
 		outdir := "."
 		if c.NArg() == 2 {
 			outdir = os.ExpandEnv(args.Get(1))
-			if err := os.Mkdir(outdir, 0755); err != nil {
+			if err := os.Mkdir(outdir, 0o755); err != nil {
 				return err
 			}
 		}

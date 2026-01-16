@@ -6,11 +6,12 @@ import (
 )
 
 type OpSpec struct {
-	Source *SourceOp `json:"source,omitempty"`
-	Exec   *ExecOp   `json:"exec,omitempty"`
-	File   *FileOp   `json:"file,omitempty"`
-	Merge  *MergeOp  `json:"merge,omitempty"`
-	Meta   *Metadata `json:"meta,omitempty"`
+	Source   *SourceOp `json:"source,omitempty"`
+	Exec     *ExecOp   `json:"exec,omitempty"`
+	File     *FileOp   `json:"file,omitempty"`
+	Merge    *MergeOp  `json:"merge,omitempty"`
+	Platform *Platform `json:"platform,omitempty"`
+	Meta     *Metadata `json:"meta,omitempty"`
 }
 
 type SourceOp struct {
@@ -45,6 +46,13 @@ type FSEntry struct {
 type MergeOp struct {
 	Target string   `json:"target,omitempty"`
 	Inputs []string `json:"inputs,omitempty"`
+}
+
+type Platform struct {
+	Architecture string `json:"architecture,omitempty"`
+	OS           string `json:"os,omitempty"`
+	Variant      string `json:"variant,omitempty"`
+	OSVersion    string `json:"osVersion,omitempty"`
 }
 
 type Metadata struct {

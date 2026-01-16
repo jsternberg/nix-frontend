@@ -9,14 +9,16 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/containerd/platforms"
 	"github.com/distribution/reference"
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/client/llb/sourceresolver"
-	"github.com/moby/buildkit/exporter/containerimage/exptypes"
+	"github.com/moby/buildkit/frontend/dockerui"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/solver/pb"
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	"github.com/opencontainers/go-digest"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/encoding/protojson"
 )
@@ -24,6 +26,15 @@ import (
 const PATH = "/nix/var/nix/profiles/per-user/root/profile/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 func Build(ctx context.Context, c client.Client) (*client.Result, error) {
+	bc, err := dockerui.NewClient(c)
+	if err != nil {
+		return nil, err
+	}
+
+	if bc.Target == "" {
+		bc.Target = "default"
+	}
+
 	var frontendImg llb.State
 	if cc, ok := c.(cf); ok {
 		baseImg, err := cc.CurrentFrontend()
@@ -34,125 +45,119 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		frontendImg = baseImg.AddEnv("PATH", PATH)
 	}
 
-	target := c.BuildOpts().Opts["target"]
-	if target == "" {
-		target = "default"
-	}
-
-	debug := false
-	if strings.HasPrefix(target, "debug:") {
-		debug = true
-		target = strings.TrimPrefix(target, "debug:")
-	}
-
-	runArgs := []string{
-		"nix-solve",
-		"-f", "/src/dockerfile.nix",
-		"-t", target,
-		"-o", "/result/dockerfile.json",
-	}
-
-	buildArgs := getBuildArgs(c)
-	if len(buildArgs) > 0 {
-		runArgs = append(runArgs, "-a", "/inputs/args.json")
-	}
-
-	runOpts := []llb.RunOption{
-		llb.WithCustomNamef("[dockerfile] resolving %s", "dockerfile.nix"),
-		llb.Args(runArgs),
-		llb.AddMount("/src", llb.Local("dockerfile", llb.FollowPaths([]string{"dockerfile.nix"}))),
-	}
-	if len(buildArgs) > 0 {
-		args, err := json.Marshal(buildArgs)
-		if err != nil {
-			return nil, err
-		}
-
-		inputs := llb.Scratch().
-			File(
-				llb.Mkfile("args.json", 0o444, args),
-			)
-		runOpts = append(runOpts, llb.AddMount("/inputs", inputs, llb.Readonly))
-	}
-
 	inputs, err := resolveInputs(ctx, c, frontendImg)
 	if err != nil {
 		return nil, err
 	}
 
-	for k, st := range inputs {
-		dest := filepath.Join("/nix/var/nix/profiles/per-user/root/channels", k)
-		runOpts = append(runOpts, llb.AddMount(dest, st))
+	runArgs := []string{
+		"nix-solve",
+		"-f", "/src/dockerfile.nix",
+		"-t", bc.Target,
+		"-o", "/result/dockerfile.json",
+		"-a", "/inputs/args.json",
 	}
 
-	st := frontendImg.
-		Run(runOpts...).
-		AddMount("/result", llb.Scratch())
-
-	def, err := st.Marshal(ctx)
-	if err != nil {
-		return nil, err
+	var bp ocispecs.Platform
+	if len(bc.BuildPlatforms) > 0 {
+		bp = bc.BuildPlatforms[0]
+	} else {
+		bp = platforms.DefaultSpec()
 	}
 
-	req := client.SolveRequest{
-		Definition: def.ToPB(),
-	}
-	res, err := c.Solve(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-
-	ref, err := res.SingleRef()
-	if err != nil {
-		return nil, err
-	}
-
-	in, err := ref.ReadFile(ctx, client.ReadRequest{
-		Filename: "dockerfile.json",
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	outDef := &pb.Definition{}
-	if err := protojson.Unmarshal(in, outDef); err != nil {
-		return nil, err
-	}
-
-	gr, err := newGraph(outDef)
-	if err != nil {
-		return nil, err
-	}
-
-	img, err := resolveImages(ctx, c, gr)
-	if err != nil {
-		return nil, err
-	}
-
-	outDef, err = gr.ToDef()
-	if err != nil {
-		return nil, err
-	}
-
-	if debug {
-		return buildDebugOutput(ctx, c, outDef)
-	}
-
-	res, err = c.Solve(ctx, client.SolveRequest{
-		Definition: outDef,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	if img != nil {
-		dt, err := json.Marshal(img)
-		if err != nil {
-			return nil, err
+	res, err := bc.Build(ctx, func(ctx context.Context, platform *ocispecs.Platform, idx int) (r client.Reference, img *dockerspec.DockerOCIImage, baseImg *dockerspec.DockerOCIImage, err error) {
+		var tp ocispecs.Platform
+		if platform != nil {
+			tp = *platform
+		} else {
+			tp = bp
 		}
-		res.AddMeta(exptypes.ExporterImageConfigKey, dt)
+
+		args, err := json.Marshal(getBuildArgs(bc, bp, tp))
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		runOpts := []llb.RunOption{
+			llb.WithCustomNamef("[dockerfile] resolving %s", "dockerfile.nix"),
+			llb.Args(runArgs),
+			llb.AddMount("/src", llb.Local("dockerfile", llb.FollowPaths([]string{"dockerfile.nix"}))),
+			llb.AddMount("/inputs", llb.Scratch().
+				File(
+					llb.Mkfile("args.json", 0o444, args),
+				),
+				llb.Readonly,
+			),
+		}
+
+		for k, st := range inputs {
+			dest := filepath.Join("/nix/var/nix/profiles/per-user/root/channels", k)
+			runOpts = append(runOpts, llb.AddMount(dest, st))
+		}
+
+		st := frontendImg.
+			Run(runOpts...).
+			AddMount("/result", llb.Scratch())
+
+		def, err := st.Marshal(ctx)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		req := client.SolveRequest{
+			Definition: def.ToPB(),
+		}
+		res, err := c.Solve(ctx, req)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		ref, err := res.SingleRef()
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		in, err := ref.ReadFile(ctx, client.ReadRequest{
+			Filename: "dockerfile.json",
+		})
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		outDef := &pb.Definition{}
+		if err := protojson.Unmarshal(in, outDef); err != nil {
+			return nil, nil, nil, err
+		}
+
+		gr, err := newGraph(outDef)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		img, err = resolveImages(ctx, c, gr)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		outDef, err = gr.ToDef()
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		res, err = c.Solve(ctx, client.SolveRequest{
+			Definition: outDef,
+		})
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		r, err = res.SingleRef()
+		return r, img, nil, err
+	})
+	if err != nil {
+		return nil, err
 	}
-	return res, nil
+	return res.Finalize()
 }
 
 type Image struct {
@@ -335,14 +340,28 @@ func resolveInputs(ctx context.Context, c client.Client, frontendImg llb.State) 
 	return inputMap, nil
 }
 
-func getBuildArgs(c client.Client) map[string]string {
-	args := make(map[string]string)
-	for k, v := range c.BuildOpts().Opts {
-		k, found := strings.CutPrefix(k, "build-arg:")
-		if !found {
-			continue
-		}
+func getBuildArgs(bc *dockerui.Client, bp, tp ocispecs.Platform) map[string]string {
+	s := [...][2]string{
+		{"buildPlatform", platforms.Format(bp)},
+		{"buildOs", bp.OS},
+		{"buildOsVersion", bp.OSVersion},
+		{"buildArch", bp.Architecture},
+		{"buildVariant", bp.Variant},
+		{"targetPlatform", platforms.FormatAll(tp)},
+		{"targetOs", tp.OS},
+		{"targetOsVersion", tp.OSVersion},
+		{"targetArch", tp.Architecture},
+		{"targetVariant", tp.Variant},
+		{"targetStage", bc.Target},
+	}
 
+	args := make(map[string]string, len(bc.BuildArgs)+len(s))
+	for _, kv := range s {
+		k, v := kv[0], kv[1]
+		args[k] = v
+	}
+
+	for k, v := range bc.BuildArgs {
 		k = toLowerCamelCase(k)
 		args[k] = v
 	}

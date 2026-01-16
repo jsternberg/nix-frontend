@@ -6,17 +6,53 @@
 
 let
   lib = {
-    llb = import ./llb { inherit system; };
+    llb = import ./llb {
+      inherit system;
+      config = mergedConfig;
+    };
     optional = x: y: if x then y else (x: x);
   };
 
   args = if argsfile != null
-    then builtins.fromJSON argsfile
+    then builtins.fromJSON (builtins.readFile argsfile)
     else {};
 
+  mkDefaultConfig = {
+    buildPlatform ? "unknown/unknown",
+    buildOs ? "unknown",
+    buildOsVersion ? null,
+    buildArch ? "unknown",
+    buildVariant ? null,
+    targetPlatform ? "unknown/unknown",
+    targetOs ? "unknown",
+    targetOsVersion ? null,
+    targetArch ? "unknown",
+    targetVariant ? null,
+    targetStage ? "default",
+    ...
+  }: {
+    build = {
+      platform = buildPlatform;
+      os = buildOs;
+      osVersion = buildOsVersion;
+      arch = buildArch;
+      variant = buildVariant;
+    };
+
+    target = {
+      platform = targetPlatform;
+      os = targetOs;
+      osVersion = targetOsVersion;
+      arch = targetArch;
+      variant = targetVariant;
+      stage = targetStage;
+    };
+  };
+
+  mergedConfig = (mkDefaultConfig args) // (config.config or {});
   allArgs = args // {
     inherit lib args;
-    config = config.config or {};
+    config = mergedConfig;
   };
   config = let
     f = import configuration;

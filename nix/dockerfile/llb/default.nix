@@ -1,4 +1,7 @@
-{ system ? builtins.currentSystem }:
+{
+  config,
+  system ? builtins.currentSystem,
+}:
 
 let
   mkOp = name: spec: derivation {
@@ -8,7 +11,12 @@ let
     args = [ "$specPath" "$out" ];
 
     passAsFile = ["spec"];
-    spec = builtins.toJSON spec;
+    spec = builtins.toJSON (spec // {
+      platform = {
+        inherit (config.target) os osVersion variant;
+        architecture = config.target.arch;
+      };
+    });
   };
 
   toAttrStr = v: if builtins.isString v
