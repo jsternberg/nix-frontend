@@ -8,7 +8,7 @@ rec {
   }:
   let
     defaultMounts = {
-      "/app".input = lib.llb.local "context" {};
+      "/app".input = lib.llb.local "context";
       "/root/.cache/go-build".type = "cache";
       "/go/pkg/mod".type = "cache";
     };
@@ -96,8 +96,8 @@ rec {
     validateVendorCommand = ["diff" "-u" "/a" "/b"];
     doValidateVendor = lib.llb.run {
       mounts = {
-        "/a".input = lib.llb.local "context" {
-          followpaths = ["go.mod" "go.sum" "vendor"];
+        "/a".input = (lib.llb.local "context").override {
+          attrs.followpaths = ["go.mod" "go.sum" "vendor"];
         };
         "/b".input = "${vendorStage}/out";
       };
