@@ -23,11 +23,12 @@ let
 
     makeOverridable = f: origArgs@{
       platform ? targetPlatform,
+      meta ? {},
       ...
     }:
     let
       args = builtins.intersectAttrs (builtins.functionArgs f) origArgs;
-      origRes = mkDerivation (f args // { inherit platform; });
+      origRes = mkDerivation (f args // { inherit meta platform; });
     in
     origRes // {
       override = newArgs: makeOverridable f (newArgs // origArgs);

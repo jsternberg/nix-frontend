@@ -24,13 +24,11 @@ rec {
       mounts = defaultMounts // {
         "/out" = {};
       };
-
-      meta.description = {
-        "llb.customname" = "go build ${builtins.concatStringsSep " " packages}";
-      };
     } buildCommand;
 
-    buildStage = doBuild image;
+    buildStage = (doBuild image).override {
+      meta.description."llb.customname" = "go build ${builtins.concatStringsSep " " packages}";
+    };
 
     testCommand = [
       "/run/bin/gotestsum"
@@ -45,10 +43,6 @@ rec {
         "/run/bin".input = testSupportBinaries;
         "/out" = {};
       };
-
-      meta.description = {
-        "llb.customname" = "go test ${builtins.concatStringsSep " " testPackages}";
-      };
     } testCommand;
 
     testStage = doTest image;
@@ -57,17 +51,17 @@ rec {
       version = "1.13.0";
       pkgpath = "gotest.tools/gotestsum";
       command = ["go" "install" "${pkgpath}@v${version}"];
-    in lib.llb.run {
-      env.GOBIN = "/out";
 
-      mounts = defaultMounts // {
-        "/out" = {};
-      };
+      installStage = lib.llb.run {
+        env.GOBIN = "/out";
 
-      meta.description = {
-        "llb.customname" = "go install gotest.tools/gotestsum@v${version}";
-      };
-    } command toolBuildEnv;
+        mounts = defaultMounts // {
+          "/out" = {};
+        };
+      } command toolBuildEnv;
+    in installStage.override {
+      meta.description."llb.customname" = "go install gotest.tools/gotestsum@v${version}";
+    };
 
     testSupportBinaries = lib.llb.merge null [ "${gotestsum}/out" ];
 
