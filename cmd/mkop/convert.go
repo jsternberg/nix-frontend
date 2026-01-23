@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/jsternberg/nix-frontend/dockerfile"
@@ -176,11 +177,21 @@ func convertFileOp(in *dockerfile.FileOp) (*pb.Op, error) {
 		switch entry := in.Locations[p]; {
 		case entry.Source != "":
 			inp := sources[entry.Source]
+
+			mode := int32(-1)
+			if entry.Mode != "" {
+				n, err := strconv.ParseInt(entry.Mode, 8, 32)
+				if err != nil {
+					return nil, err
+				}
+				mode = int32(n)
+			}
 			action.SecondaryInput = int64(inp.Index)
 			action.Action = &pb.FileAction_Copy{
 				Copy: &pb.FileActionCopy{
 					Src:  inp.Path,
 					Dest: p,
+					Mode: mode,
 				},
 			}
 		case entry.Text != "":
@@ -188,7 +199,7 @@ func convertFileOp(in *dockerfile.FileOp) (*pb.Op, error) {
 				Mkfile: &pb.FileActionMkFile{
 					Path: p,
 					Data: []byte(entry.Text),
-					Mode: 0644,
+					Mode: 0o644,
 				},
 			}
 		}
