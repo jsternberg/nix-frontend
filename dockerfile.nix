@@ -40,9 +40,11 @@
           };
         } [ "/bin/sh" "/run/setup" ] baseImage;
       in
-      lib.llb.file postSetup {
+      (lib.llb.file postSetup {
         # TODO: no current way to set the entrypoint so that needs to be fixed.
         "/bin".source = targets.default;
+      }).override {
+        meta.image.entrypoint = ["/bin/frontend"];
       };
   };
 }

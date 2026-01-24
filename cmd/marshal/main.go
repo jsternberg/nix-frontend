@@ -110,10 +110,17 @@ func convert(specs map[string]*Vertex, order []string) (*pb.Definition, error) {
 
 		src, _ := protojson.Marshal(v.Op)
 		v.Meta.Description["llb.source"] = string(src)
-		if v.Meta != nil {
-			def.Metadata[out.Digest] = &pb.OpMetadata{
-				Description: v.Meta.Description,
+
+		if v.Meta.Image != nil {
+			imageConfig, err := json.Marshal(v.Meta.Image)
+			if err != nil {
+				return nil, err
 			}
+			v.Meta.Description["oci.image.config"] = string(imageConfig)
+		}
+
+		def.Metadata[out.Digest] = &pb.OpMetadata{
+			Description: v.Meta.Description,
 		}
 		outputs[path] = out
 	}

@@ -57,13 +57,8 @@ func mkop(d string, infile string) error {
 	}
 
 	v := &dockerfile.Vertex{
-		Op: op,
-	}
-	if spec.Meta != nil {
-		if v.Meta == nil {
-			v.Meta = &dockerfile.Metadata{}
-		}
-		v.Meta.Description = spec.Meta.Description
+		Op:   op,
+		Meta: spec.Meta,
 	}
 
 	if err := WriteJSON(v, d, "vertex.json"); err != nil {

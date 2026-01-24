@@ -40,11 +40,18 @@ func (g *graph) Head() (digest.Digest, *pb.Op) {
 	return digest.Digest(dgst), g.opByDigest[dgst]
 }
 
-func (g *graph) All() iter.Seq2[digest.Digest, *pb.Op] {
-	return func(yield func(digest.Digest, *pb.Op) bool) {
+func (g *graph) All() iter.Seq2[digest.Digest, Vertex] {
+	return func(yield func(digest.Digest, Vertex) bool) {
 		for _, dgst := range g.digestOrder {
 			op := g.opByDigest[dgst]
-			if !yield(digest.Digest(dgst), op) {
+
+			v := Vertex{Op: op}
+			if md, ok := g.metadata[dgst]; ok {
+				v.Meta = &Metadata{
+					Description: md.Description,
+				}
+			}
+			if !yield(digest.Digest(dgst), v) {
 				return
 			}
 		}
@@ -52,8 +59,8 @@ func (g *graph) All() iter.Seq2[digest.Digest, *pb.Op] {
 }
 
 func (g *graph) Walk(fn func(op *pb.Op) error) error {
-	for _, op := range g.All() {
-		if err := fn(op); err != nil {
+	for _, v := range g.All() {
+		if err := fn(v.Op); err != nil {
 			return err
 		}
 	}

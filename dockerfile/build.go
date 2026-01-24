@@ -172,22 +172,21 @@ func resolveImages(ctx context.Context, c client.Client, gr *graph) (*dockerspec
 		return nil, err
 	}
 
-	for dgst, op := range gr.All() {
-		switch o := op.Op.(type) {
+	for dgst, v := range gr.All() {
+		var img *Image
+		switch o := v.Op.Op.(type) {
 		case *pb.Op_Source:
 			if !strings.HasPrefix(o.Source.Identifier, "docker-image://") {
 				continue
 			}
-
 			ref := strings.TrimPrefix(o.Source.Identifier, "docker-image://")
-			config := imgs[ref]
-			o.Source.Identifier = "docker-image://" + config.Ref
-			imgs[string(dgst)] = config
+			img = imgs[ref]
+			o.Source.Identifier = "docker-image://" + img.Ref
 		case *pb.Op_Exec:
 			for _, m := range o.Exec.Mounts {
 				if m.Dest == "/" && m.Input >= 0 {
-					inp := op.Inputs[m.Input]
-					if img := imgs[inp.Digest]; img != nil {
+					inp := v.Op.Inputs[m.Input]
+					if img = imgs[inp.Digest]; img != nil {
 						config := img.Config
 						if o.Exec.Meta.Cwd == "" {
 							o.Exec.Meta.Cwd = config.WorkingDir
@@ -196,16 +195,31 @@ func resolveImages(ctx context.Context, c client.Client, gr *graph) (*dockerspec
 						if o.Exec.Meta.User == "" {
 							o.Exec.Meta.User = config.User
 						}
-						imgs[string(dgst)] = img
 						break
 					}
 				}
 			}
 		default:
-			if len(op.Inputs) > 0 {
-				inp := op.Inputs[0]
-				imgs[string(dgst)] = imgs[inp.Digest]
+			if len(v.Op.Inputs) > 0 {
+				inp := v.Op.Inputs[0]
+				img = imgs[inp.Digest]
 			}
+		}
+
+		if img != nil {
+			// Any attributes to update?
+			if dt, ok := v.Meta.Description["oci.image.config"]; ok {
+				var config dockerspec.DockerOCIImageConfig
+				if err := json.Unmarshal([]byte(dt), &config); err != nil {
+					return nil, err
+				}
+
+				// Merge in attributes from the config.
+				cloneImg := *img
+				mergeImageConfig(&cloneImg.Config, &config)
+				img = &cloneImg
+			}
+			imgs[string(dgst)] = img
 		}
 	}
 
@@ -214,6 +228,21 @@ func resolveImages(ctx context.Context, c client.Client, gr *graph) (*dockerspec
 		return &img.DockerOCIImage, nil
 	}
 	return nil, nil
+}
+
+func mergeImageConfig(into, from *dockerspec.DockerOCIImageConfig) {
+	if len(from.Cmd) > 0 {
+		into.Cmd = from.Cmd
+	}
+	if len(from.Entrypoint) > 0 {
+		into.Entrypoint = from.Entrypoint
+	}
+	if from.WorkingDir != "" {
+		into.WorkingDir = from.WorkingDir
+	}
+	if from.User != "" {
+		into.User = from.User
+	}
 }
 
 func resolveImageConfigs(ctx context.Context, c client.Client, gr *graph) (map[string]*Image, error) {

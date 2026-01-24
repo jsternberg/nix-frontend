@@ -51,3 +51,6 @@ fi
 
 ${cmd}
 cp /tmp/result "${OUTPUT}"
+
+cat "${OUTPUT}"
+find /nix/store -name vertex.json | xargs cat
