@@ -35,7 +35,13 @@ let
       );
     in
     origRes // {
-      override = newArgs: makeOverridable f (newArgs // origArgs);
+      override = newArgs:
+        let
+          args = (if builtins.isFunction newArgs
+            then newArgs origArgs
+            else newArgs) // origArgs;
+        in
+        makeOverridable f args;
     };
   in
   makeOverridable f;
