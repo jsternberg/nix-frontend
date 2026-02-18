@@ -134,7 +134,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 			return nil, nil, nil, err
 		}
 
-		img, err = resolveImages(ctx, c, gr)
+		img, err = resolveImages(ctx, c, gr, tp)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -166,8 +166,8 @@ type Image struct {
 	dockerspec.DockerOCIImage
 }
 
-func resolveImages(ctx context.Context, c client.Client, gr *graph) (*dockerspec.DockerOCIImage, error) {
-	imgs, err := resolveImageConfigs(ctx, c, gr)
+func resolveImages(ctx context.Context, c client.Client, gr *graph, tp ocispecs.Platform) (*dockerspec.DockerOCIImage, error) {
+	imgs, err := resolveImageConfigs(ctx, c, gr, tp)
 	if err != nil {
 		return nil, err
 	}
@@ -245,7 +245,7 @@ func mergeImageConfig(into, from *dockerspec.DockerOCIImageConfig) {
 	}
 }
 
-func resolveImageConfigs(ctx context.Context, c client.Client, gr *graph) (map[string]*Image, error) {
+func resolveImageConfigs(ctx context.Context, c client.Client, gr *graph, tp ocispecs.Platform) (map[string]*Image, error) {
 	m := sync.Map{}
 	seen := make(map[string]struct{})
 
@@ -253,6 +253,11 @@ func resolveImageConfigs(ctx context.Context, c client.Client, gr *graph) (map[s
 	defer eg.Wait()
 
 	if err := gr.Walk(func(op *pb.Op) error {
+		platform := tp
+		if op.Platform != nil {
+			platform = op.Platform.Spec()
+		}
+
 		switch op := op.Op.(type) {
 		case *pb.Op_Source:
 			if !strings.HasPrefix(op.Source.Identifier, "docker-image://") {
@@ -272,7 +277,9 @@ func resolveImageConfigs(ctx context.Context, c client.Client, gr *graph) (map[s
 			seen[refName] = struct{}{}
 
 			eg.Go(func() error {
-				ref, dgst, dt, err := c.ResolveImageConfig(ctx, refName, sourceresolver.Opt{})
+				ref, dgst, dt, err := c.ResolveImageConfig(ctx, refName, sourceresolver.Opt{
+					Platform: &platform,
+				})
 				if err != nil {
 					return err
 				}
@@ -371,12 +378,10 @@ func resolveInputs(ctx context.Context, c client.Client, frontendImg llb.State) 
 
 func getBuildArgs(bc *dockerui.Client, bp, tp ocispecs.Platform) map[string]string {
 	s := [...][2]string{
-		{"buildPlatform", platforms.Format(bp)},
 		{"buildOs", bp.OS},
 		{"buildOsVersion", bp.OSVersion},
 		{"buildArch", bp.Architecture},
 		{"buildVariant", bp.Variant},
-		{"targetPlatform", platforms.FormatAll(tp)},
 		{"targetOs", tp.OS},
 		{"targetOsVersion", tp.OSVersion},
 		{"targetArch", tp.Architecture},

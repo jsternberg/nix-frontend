@@ -14,7 +14,7 @@
 
   targets = { lib, std, ... }:
   let
-    targets = std.golang.build {};
+    targets = std.golang.build { cgo = true; };
     context = lib.llb.local "context";
   in
   targets // {
