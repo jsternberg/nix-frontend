@@ -44,18 +44,13 @@ func load(input string) (map[string]*Vertex, []string, error) {
 			// We add this even if the file has been loaded before because
 			// we want to capture the full reverse load order.
 			order = append(order, inputPath)
-
-			// Check if we have already loaded the file.
-			if _, ok := loaded[inputPath]; ok {
-				// Already visited.
-				continue
-			}
 			unvisited[inputPath] = struct{}{}
 		}
 		loaded[path] = v
 	}
 
 	reverse(order)
+	order = removeDuplicates(order)
 
 	if len(order) > 0 {
 		loaded["result"] = &Vertex{
@@ -245,6 +240,21 @@ func reverse[T any](arr []T) {
 	for i, j := 0, len(arr)-1; i < j; i, j = i+1, j-1 {
 		arr[i], arr[j] = arr[j], arr[i]
 	}
+}
+
+func removeDuplicates[T comparable](arr []T) []T {
+	seen := make(map[T]bool)
+
+	var filtered []T
+	for _, v := range arr {
+		if seen[v] {
+			continue
+		}
+		seen[v] = true
+
+		filtered = append(filtered, v)
+	}
+	return filtered
 }
 
 func marshalJSON(def *pb.Definition) ([]byte, error) {

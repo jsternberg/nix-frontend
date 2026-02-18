@@ -10,6 +10,7 @@ let
       inherit system;
       config = mergedConfig;
     };
+    platform = import ./platform.nix mergedConfig;
     optional = x: y: if x then y else (x: x);
   };
 
@@ -18,21 +19,19 @@ let
     else {};
 
   mkDefaultConfig = {
-    buildPlatform ? "unknown/unknown",
-    buildOs ? "unknown",
+    buildOs ? null,
     buildOsVersion ? null,
-    buildArch ? "unknown",
+    buildArch ? null,
     buildVariant ? null,
-    targetPlatform ? "unknown/unknown",
-    targetOs ? "unknown",
+    targetOs ? null,
     targetOsVersion ? null,
-    targetArch ? "unknown",
+    targetArch ? null,
     targetVariant ? null,
     targetStage ? "default",
     ...
-  }: {
+  }:
+  let
     build = {
-      platform = buildPlatform;
       os = buildOs;
       osVersion = buildOsVersion;
       arch = buildArch;
@@ -40,13 +39,15 @@ let
     };
 
     target = {
-      platform = targetPlatform;
       os = targetOs;
       osVersion = targetOsVersion;
       arch = targetArch;
       variant = targetVariant;
       stage = targetStage;
     };
+  in
+  {
+    inherit build target;
   };
 
   mergedConfig = (mkDefaultConfig args) // (config.config or {});

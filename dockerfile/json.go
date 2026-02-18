@@ -49,7 +49,7 @@ type MergeOp struct {
 }
 
 type Platform struct {
-	Architecture string `json:"architecture,omitempty"`
+	Architecture string `json:"arch,omitempty"`
 	OS           string `json:"os,omitempty"`
 	Variant      string `json:"variant,omitempty"`
 	OSVersion    string `json:"osVersion,omitempty"`

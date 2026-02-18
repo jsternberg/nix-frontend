@@ -5,9 +5,10 @@
 
 let
   targetPlatform = {
-    inherit (config.target) os osVersion variant;
-    architecture = config.target.arch;
+    inherit (config.target) arch os osVersion variant;
   };
+
+  hasPlatform = x: x != null && x ? platform;
 
   mkOp = name: f:
   let
@@ -42,17 +43,20 @@ let
             else newArgs) // origArgs;
         in
         makeOverridable f args;
+
+      # Make available for inheriting.
+      inherit platform;
     };
   in
   makeOverridable f;
 
   mkSource = mkOp "source" ({
     identifier,
-    attrs ? {},
+    attrs ? null,
   }: {
     source = {
       inherit identifier;
-      attrs = builtins.mapAttrs (k: toAttrStr) attrs;
+      ${if attrs != null then "attrs" else null} = builtins.mapAttrs (k: toAttrStr) attrs;
     };
   });
 
@@ -108,10 +112,12 @@ rec {
 
   merge = target: inputs: mkMerge {
     inherit target inputs;
+    ${if hasPlatform target then "platform" else null} = target.platform;
   };
 
   file = target: locations: mkFile {
     inherit target locations;
+    ${if hasPlatform target then "platform" else null} = target.platform;
   };
 
   run = optsOrCommand:
@@ -119,13 +125,21 @@ rec {
       then input: mkExec {
         command = optsOrCommand;
         mounts."/".input = input;
+        ${if hasPlatform input then "platform" else null} = input.platform;
       }
       else command: input:
-        (mkExec { inherit command; }).override (optsOrCommand // {
-          mounts = {
-            "/".input = input;
-          } // (optsOrCommand.mounts or {});
-        });
+        let
+          base = mkExec {
+            inherit command;
+            ${if hasPlatform input then "platform" else null} = input.platform;
+          };
+          overrideArgs = optsOrCommand // {
+            mounts = {
+              "/".input = input;
+            } // (optsOrCommand.mounts or {});
+          };
+        in
+        base.override overrideArgs;
 
   inputs = spec: derivation {
     name = "llb-inputs.json";

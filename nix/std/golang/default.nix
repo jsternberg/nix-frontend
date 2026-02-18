@@ -5,6 +5,7 @@ rec {
   build = {
     packages ? ["./cmd/..."],
     testPackages ? ["./..."],
+    cgo ? false,
   }:
   let
     defaultMounts = {
@@ -13,12 +14,34 @@ rec {
       "/go/pkg/mod".type = "cache";
     };
 
-    # TODO: should be able to reuse the definition in alpine here.
-    toolBuildEnv = lib.llb.run {} ["apk" "add" "--no-cache" "git"] image;
+    useXX = cgo && lib.platform.isCross;
+    xx = (lib.llb.image "docker.io/tonistiigi/xx:1.9.0").override {
+      platform = config.build;
+    };
 
-    buildCommand = [ "go" "build" "-o" "/out" ] ++ packages;
+    targetPlatform = lib.platform.format config.target;
+
+    mkBuildEnv = platform:
+      let
+        packages = lib.optional useXX (x: x ++ ["clang" "lld" "musl-dev" "pkgconfig"]) ["git"];
+        step1 = lib.optional useXX
+          (s: s.override { inherit platform; })
+          image;
+        step2 = lib.llb.run {} (["apk" "add" "--no-cache"] ++ packages) step1;
+        step3 = lib.optional useXX (p: lib.llb.file p {
+          "/".source = xx;
+        }) step2;
+      in
+      step3;
+
+    buildEnv = mkBuildEnv config.build;
+    testEnv = mkBuildEnv config.target;
+
+    goBin = if useXX then "xx-go" else "go";
+    buildCommand = [ goBin "build" "-o" "/out" ] ++ packages;
     doBuild = lib.llb.run {
-      env.CGO_ENABLED = "0";
+      env.CGO_ENABLED = if useXX then "1" else "0";
+      env.TARGETPLATFORM = targetPlatform;
       workdir = "/app";
 
       mounts = defaultMounts // {
@@ -26,7 +49,7 @@ rec {
       };
     } buildCommand;
 
-    buildStage = (doBuild image).override {
+    buildStage = (doBuild buildEnv).override {
       meta.description."llb.customname" = "go build ${builtins.concatStringsSep " " packages}";
     };
 
@@ -36,7 +59,7 @@ rec {
       "--format=standard-verbose"
     ] ++ testPackages;
     doTest = lib.llb.run {
-      env.CGO_ENABLED = "0";
+      env.CGO_ENABLED = if useXX then "1" else "0";
       workdir = "/app";
 
       mounts = defaultMounts // {
@@ -45,12 +68,12 @@ rec {
       };
     } testCommand;
 
-    testStage = doTest image;
+    testStage = doTest testEnv;
 
     gotestsum = let
       version = "1.13.0";
       pkgpath = "gotest.tools/gotestsum";
-      command = ["go" "install" "${pkgpath}@v${version}"];
+      command = [goBin "install" "${pkgpath}@v${version}"];
 
       installStage = lib.llb.run {
         env.GOBIN = "/out";
@@ -58,7 +81,7 @@ rec {
         mounts = defaultMounts // {
           "/out" = {};
         };
-      } command toolBuildEnv;
+      } command buildEnv;
     in installStage.override {
       meta.description."llb.customname" = "go install gotest.tools/gotestsum@v${version}";
     };
@@ -67,7 +90,7 @@ rec {
 
     vendorCommand = [ "/bin/sh" "/run/vendor" ];
     doVendor = lib.llb.run {
-      env.CGO_ENABLED = "0";
+      env.CGO_ENABLED = if useXX then "1" else "0";
       workdir = "/app";
 
       mounts = defaultMounts // {
@@ -85,7 +108,7 @@ rec {
       };
     } vendorCommand;
 
-    vendorStage = doVendor image;
+    vendorStage = doVendor buildEnv;
 
     validateVendorCommand = ["diff" "-u" "/a" "/b"];
     doValidateVendor = lib.llb.run {
