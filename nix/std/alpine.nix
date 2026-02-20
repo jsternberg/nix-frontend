@@ -7,32 +7,14 @@ let
   };
   cfg = defaultConfig // (config.alpine or {});
 
-  image = {
+  factoryFunc = {
     repository ? cfg.repository,
     version ? cfg.version,
-  }:
-  lib.llb.image "${repository}:${version}";
+  }: {
+    image = lib.llb.image "${repository}:${version}";
 
-  baseImage = image {};
+    installSystemPackages = systemPackages:
+      lib.llb.run (["apk" "add" "--no-cache"] ++ systemPackages);
+  };
 in
-{
-  inherit image;
-  system = {
-    image ? baseImage,
-    systemPackages ? [],
-    packages ? [],
-  }:
-  let
-    installSystemPackages = lib.optional (systemPackages != [])
-      (lib.llb.run (["apk" "add" "--no-cache"] ++ systemPackages));
-
-    byPrefix = builtins.groupBy (x: x.meta.installPrefix) packages;
-    installPackageFuncs = builtins.attrValues
-      (builtins.mapAttrs
-        (prefix: x: y: lib.llb.merge "${y}/usr${prefix}" x)
-        byPrefix);
-    installPackages = lib.optional (packages != [])
-      (x: builtins.foldl' (acc: f: f acc) x installPackageFuncs);
-  in
-  installPackages (installSystemPackages image);
-}
+lib.system.makeFactory factoryFunc defaultConfig

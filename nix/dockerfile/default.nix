@@ -11,6 +11,7 @@ let
       config = mergedConfig;
     };
     platform = import ./platform.nix mergedConfig;
+    system = import ./system.nix lib;
     optional = x: y: if x then y else (x: x);
   };
 
