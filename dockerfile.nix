@@ -20,7 +20,7 @@
     project = std.golang.build { cgo = true; };
     context = lib.llb.local "context";
   in
-  {
+  rec {
     # Only include binaries and test targets.
     # We do not use vendoring so there's no point in including
     # those targets here.
@@ -64,5 +64,7 @@
         # Set image entrypoint to /bin/frontend.
         meta.image.entrypoint = ["/bin/frontend"];
       };
+
+    default = frontend;
   };
 }
