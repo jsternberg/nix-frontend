@@ -33,7 +33,7 @@
       let
         # Base step uses the current alpine version and installs the
         # nix binary.
-        baseImage = std.alpine.system {
+        baseImage = std.alpine.setup {
           systemPackages = ["nix"];
         };
 

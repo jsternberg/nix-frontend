@@ -35,7 +35,7 @@ The `dockerfile.nix` file is the definition of your build. It is of the format:
 {
   targets = { std, ... }:
   {
-    default = std.alpine.system {
+    default = std.alpine.setup {
       systemPackages = [ "curl" ];
     };
   };
@@ -84,7 +84,7 @@ Other build files written in Nix may also be injected to the script through the 
 
     # Define a default target that installs the ca-certificates package inside of alpine
     # with apk add and then copies the binaries from the binaries target into the image.
-    default = std.alpine.system {
+    default = std.alpine.setup {
       systemPackages = ["ca-certificates"];
       packages = [binaries];
     };

@@ -22,7 +22,7 @@ let
       }: {
         _type = "system";
 
-        system = {
+        setup = {
           systemPackages ? [],
           packages ? [],
         }:

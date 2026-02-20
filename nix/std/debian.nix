@@ -24,5 +24,11 @@ let
         mounts."/var/cache/apt".type = "tmpfs";
       } "apt-get update && apt-get install -y --no-install-recommends ${packages}";
   };
+
+  base = lib.system.makeFactory factoryFunc cfg;
 in
-lib.system.makeFactory factoryFunc cfg
+base // {
+  slim = base.override { version, ... }: {
+    version = "${version}-slim";
+  };
+}
