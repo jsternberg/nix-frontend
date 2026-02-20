@@ -28,7 +28,7 @@ let
   base = lib.system.makeFactory factoryFunc cfg;
 in
 base // {
-  slim = base.override { version, ... }: {
+  slim = base.override ({ version, ... }: {
     version = "${version}-slim";
-  };
+  });
 }
