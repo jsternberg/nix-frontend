@@ -38,11 +38,12 @@ let
     origRes // {
       override = newArgs:
         let
-          args = (if builtins.isFunction newArgs
-            then newArgs origArgs
-            else newArgs) // origArgs;
+          overrideWith = newArgs: origArgs //
+            (if builtins.isFunction newArgs
+              then newArgs origArgs
+              else newArgs);
         in
-        makeOverridable f args;
+        makeOverridable f (overrideWith newArgs);
 
       # Make available for inheriting.
       inherit platform;
