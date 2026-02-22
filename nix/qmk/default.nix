@@ -1,6 +1,6 @@
 { lib, std, ... }:
 
-rec {
+let
   firmware = {
     default = lib.llb.git "https://github.com/qmk/qmk_firmware.git";
     zsa = lib.llb.git "https://github.com/zsa/qmk_firmware.git#firmware25" // {
@@ -8,10 +8,15 @@ rec {
     };
   };
 
+  default = firmware.default;
+in
+{
+  inherit firmware;
+
   keyboard = {
     for,
     name,
-    firmware ? firmware.default,
+    firmware ? default,
     source ? null,
   }:
   let
