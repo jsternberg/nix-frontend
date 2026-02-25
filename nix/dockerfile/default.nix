@@ -5,14 +5,13 @@
 }:
 
 let
-  lib = {
+  lib = import ./utils.nix // {
     llb = import ./llb {
-      inherit system;
+      inherit lib system;
       config = mergedConfig;
     };
     platform = import ./platform.nix mergedConfig;
     system = import ./system.nix lib;
-    optional = x: y: if x then y else (x: x);
   };
 
   args = if argsfile != null

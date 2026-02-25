@@ -1,4 +1,5 @@
 {
+  lib,
   config,
   system ? builtins.currentSystem,
 }:
@@ -12,44 +13,31 @@ let
 
   mkOp = name: f:
   let
-    mkDerivation = spec: derivation {
+    mkDerivation = spec@{
+      platform ? targetPlatform,
+      meta ? null,
+      ...
+    }: derivation {
       name = "llb-${name}";
       inherit system;
       builder = "/bin/mkop";
       args = [ "$specPath" "$out" ];
 
       passAsFile = ["spec"];
-      spec = builtins.toJSON spec;
-    };
-
-    makeOverridable = f: origArgs@{
-      platform ? targetPlatform,
-      meta ? null,
-      ...
-    }:
-    let
-      args = builtins.intersectAttrs (builtins.functionArgs f) origArgs;
-      origRes = mkDerivation (
-        (f args)
-        // (if meta != null then { inherit meta; } else {})
-        // { inherit platform; }
-      );
-    in
-    origRes // {
-      override = newArgs:
-        let
-          overrideWith = newArgs: origArgs //
-            (if builtins.isFunction newArgs
-              then newArgs origArgs
-              else newArgs);
-        in
-        makeOverridable f (overrideWith newArgs);
-
+      spec = let
+        args = builtins.intersectAttrs (builtins.functionArgs f) spec;
+        finalSpec = (f args)
+          // (if meta != null then { inherit meta; } else {})
+          // { inherit platform; };
+      in
+      builtins.toJSON finalSpec;
+    }
+    // {
       # Make available for inheriting.
       inherit platform;
     };
   in
-  makeOverridable f;
+  lib.makeOverridable mkDerivation;
 
   mkSource = mkOp "source" ({
     identifier,
