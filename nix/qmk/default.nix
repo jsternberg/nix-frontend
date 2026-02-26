@@ -1,17 +1,22 @@
 { lib, std, ... }:
 
 let
-  firmware = {
-    default = lib.llb.git "https://github.com/qmk/qmk_firmware.git";
-    zsa = lib.llb.git "https://github.com/zsa/qmk_firmware.git#firmware25" // {
-      v25 = lib.llb.git "https://github.com/zsa/qmk_firmware.git#firmware25";
-    };
+  default = lib.llb.git "https://github.com/qmk/qmk_firmware.git";
+  zsa = default.override {
+    url = "https://github.com/zsa/qmk_firmware.git";
+    ref = "firmware25";
   };
-
-  default = firmware.default;
 in
 {
-  inherit firmware;
+  firmware = {
+    inherit default;
+    zsa = zsa // {
+      firmware25 = zsa;
+      firmware24 = zsa.override {
+        ref = "firmware24";
+      };
+    };
+  };
 
   keyboard = {
     for,

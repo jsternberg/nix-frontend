@@ -39,6 +39,32 @@ let
   in
   lib.makeOverridable mkDerivation;
 
+  mkGitSource = mkOp "source" ({
+    url,
+    ref ? null,
+    subdir ? null,
+    keepGitDir ? false,
+    skipSubmodules ? false,
+    checksum ? null,
+  }:
+  let
+    refComponent = if ref != null || subdir != null
+      then "#${builtins.toString ref}" else "";
+    subdirComponent = if subdir != null
+      then ":${subdir}" else "";
+    id = builtins.concatStringsSep "" [ url refComponent subdirComponent ];
+  {
+    source = {
+      identifier = "git://${id}";
+      attrs = {
+        "git.fullurl" = url;
+      }
+      // if keepGitDir then { "git.keepgitdir" = true; } else {}
+      // if skipSubmodules then { "git.skipsubmodules" = true; } else {}
+      // if checksum != null then { "git.checksum" = checksum; } else {};
+    };
+  });
+
   mkSource = mkOp "source" ({
     identifier,
     attrs ? null,
@@ -91,9 +117,13 @@ rec {
     identifier = "local://${name}";
   };
 
-  git = url: mkSource {
-    identifier = "git://${url}";
-  };
+  git = urlOrOpts:
+    let
+      opts = if builtins.isString urlOrOpts
+        then { url = urlOrOpts; }
+        else urlOrOpts;
+    in
+    mkGitSource opts;
 
   image = name: mkSource {
     identifier = "docker-image://${name}";
