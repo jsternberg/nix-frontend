@@ -6,6 +6,7 @@ rec {
     packages ? ["./cmd/..."],
     testPackages ? ["./..."],
     cgo ? false,
+    vendor ? false,
   }:
   let
     defaultMounts = {
@@ -131,7 +132,8 @@ rec {
     validate-vendor = validateVendorStage;
   in
   {
-    inherit binaries test vendor validate-vendor;
+    inherit binaries test;
     default = binaries;
-  };
+  }
+  // if vendor then { inherit vendor validate-vendor; } else {};
 }
