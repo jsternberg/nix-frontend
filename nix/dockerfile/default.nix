@@ -5,7 +5,7 @@
 }:
 
 let
-  lib = import ./utils.nix // {
+  lib = (import ./utils.nix) // {
     llb = import ./llb {
       inherit lib system;
       config = mergedConfig;

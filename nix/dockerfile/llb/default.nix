@@ -53,15 +53,16 @@ let
     subdirComponent = if subdir != null
       then ":${subdir}" else "";
     id = builtins.concatStringsSep "" [ url refComponent subdirComponent ];
+  in
   {
     source = {
       identifier = "git://${id}";
       attrs = {
         "git.fullurl" = url;
       }
-      // if keepGitDir then { "git.keepgitdir" = true; } else {}
-      // if skipSubmodules then { "git.skipsubmodules" = true; } else {}
-      // if checksum != null then { "git.checksum" = checksum; } else {};
+      // (if keepGitDir then { "git.keepgitdir" = true; } else {})
+      // (if skipSubmodules then { "git.skipsubmodules" = true; } else {})
+      // (if checksum != null then { "git.checksum" = checksum; } else {});
     };
   });
 
