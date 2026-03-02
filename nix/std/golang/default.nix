@@ -128,12 +128,13 @@ rec {
       meta.installPrefix = "/bin";
     };
     test = "${testStage}/out";
-    vendor = "${vendorStage}/out";
-    validate-vendor = validateVendorStage;
   in
   {
     inherit binaries test;
     default = binaries;
   }
-  // if vendor then { inherit vendor validate-vendor; } else {};
+  // (if vendor then {
+    vendor = "${vendorStage}/out";
+    validate-vendor = validateVendorStage;
+  } else {});
 }
