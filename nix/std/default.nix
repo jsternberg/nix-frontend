@@ -14,6 +14,7 @@ let
 
   full = minimal // {
     golang = import ./golang args;
+    rust = import ./rust args;
   };
 in
 full
