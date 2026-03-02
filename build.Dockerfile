@@ -16,19 +16,15 @@ EOT
 FROM scratch AS binaries
 COPY --from=dockerfile /out/ /
 
-FROM scratch AS library-golang
-COPY ./nix/golang /
-
 FROM alpine:${ALPINE_VERSION} AS alpine-base
 FROM alpine-base AS frontend
 RUN apk add --no-cache nix
-RUN --mount=target=/src/nix/channels/dockerfile,source=./nix/dockerfile \
-    --mount=target=/src/nix/channels/std,source=./nix/std \
-    --mount=target=/src/nix/profile/bin,source=./nix/bin <<EOT
-  set -e
-  echo 'filter-syscalls = false' >> /etc/nix/nix.conf
-  nix-env -i $(nix-store --add /src/nix/channels) -p /nix/var/nix/profiles/per-user/root/channels
-  nix-env -i $(nix-store --add /src/nix/profile) -p /nix/var/nix/profiles/per-user/root/profile
+COPY ./nix/dockerfile /nix/var/nix/dockerfile
+COPY ./nix/std /nix/var/nix/std
+COPY ./nix/bin /bin/
+COPY <<EOT /etc/nix/nix.conf
+nix-path = /nix/var/nix
+filter-syscalls = false
 EOT
 COPY --from=binaries . /bin/
 ENTRYPOINT ["/bin/frontend"]

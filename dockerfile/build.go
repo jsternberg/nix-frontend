@@ -23,7 +23,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
-const PATH = "/nix/var/nix/profiles/per-user/root/profile/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+const PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 	bc, err := dockerui.NewClient(c)
@@ -88,6 +88,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 				),
 				llb.Readonly,
 			),
+			llb.AddMount("/nix/store", llb.Scratch(), llb.AsPersistentCacheDir("nix-frontend-store", llb.CacheMountShared)),
 		}
 
 		for k, st := range inputs {
@@ -324,6 +325,7 @@ func resolveInputs(ctx context.Context, c client.Client, frontendImg llb.State) 
 		llb.WithCustomNamef("[dockerfile] resolving inputs for %s", "dockerfile.nix"),
 		llb.Args(runArgs),
 		llb.AddMount("/src", llb.Local("dockerfile", llb.FollowPaths([]string{"dockerfile.nix"}))),
+		llb.AddMount("/nix/store", llb.Scratch(), llb.AsPersistentCacheDir("nix-frontend-store", llb.CacheMountShared)),
 	}
 
 	st := frontendImg.

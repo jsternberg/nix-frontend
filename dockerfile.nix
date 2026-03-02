@@ -37,27 +37,16 @@
           systemPackages = ["nix"];
         };
 
-        # Creates some bind mounts from the context and then runs heredoc script
-        # to configure nix and copy the nix sources into the frontend.
-        postSetup = lib.llb.run {
-          mounts = {
-            "/src/nix/channels/dockerfile".input = "${context}/nix/dockerfile";
-            "/src/nix/channels/std".input = "${context}/nix/std";
-            "/src/nix/profile/bin".input = "${context}/nix/bin";
-            "/run".input = lib.llb.file null {
-              "/setup".text = ''
-                set -e
-                echo 'filter-syscalls = false' >> /etc/nix/nix.conf
-                nix-env -i $(nix-store --add /src/nix/channels) -p /nix/var/nix/profiles/per-user/root/channels
-                nix-env -i $(nix-store --add /src/nix/profile) -p /nix/var/nix/profiles/per-user/root/profile
-              '';
-            };
-          };
-        } [ "/bin/sh" "/run/setup" ] baseImage;
-
-        # Copy the binaries from the binaries target into the /bin folder.
-        final = lib.llb.file postSetup {
-          "/bin".source = project.binaries;
+        # Copy the binaries from the binaries target into the /bin folder
+        # and also copy the nix files into the appropriate directories.
+        final = lib.llb.file baseImage {
+          "/nix/var/nix/dockerfile".source = "${context}/nix/dockerfile";
+          "/nix/var/nix/std".source = "${context}/nix/std";
+          "/bin".source = lib.llb.merge null [ "${context}/nix/bin" project.binaries ];
+          "/etc/nix/nix.conf".text = ''
+            nix-path = /nix/var/nix
+            filter-syscalls = false
+          '';
         };
       in
       final.override {
