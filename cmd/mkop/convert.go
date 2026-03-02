@@ -142,8 +142,9 @@ func convertFileOp(in *dockerfile.FileOp) (*pb.Op, error) {
 				return nil, err
 			}
 			sources[entry.Source] = &MergeInput{
-				Index: index,
-				Path:  path,
+				Index:           index,
+				Path:            path,
+				ExcludePatterns: entry.Exclude,
 			}
 		}
 	}
@@ -189,9 +190,10 @@ func convertFileOp(in *dockerfile.FileOp) (*pb.Op, error) {
 			action.SecondaryInput = int64(inp.Index)
 			action.Action = &pb.FileAction_Copy{
 				Copy: &pb.FileActionCopy{
-					Src:  inp.Path,
-					Dest: p,
-					Mode: mode,
+					Src:             inp.Path,
+					Dest:            p,
+					Mode:            mode,
+					ExcludePatterns: entry.Exclude,
 				},
 			}
 		case entry.Text != "":
@@ -219,8 +221,9 @@ func convertFileOp(in *dockerfile.FileOp) (*pb.Op, error) {
 }
 
 type MergeInput struct {
-	Index pb.InputIndex
-	Path  string
+	Index           pb.InputIndex
+	Path            string
+	ExcludePatterns []string
 }
 
 func convertMergeOp(in *dockerfile.MergeOp) (*pb.Op, error) {
@@ -275,9 +278,10 @@ func convertMergeOp(in *dockerfile.MergeOp) (*pb.Op, error) {
 			Output:         -1,
 			Action: &pb.FileAction_Copy{
 				Copy: &pb.FileActionCopy{
-					Src:  src,
-					Dest: target.Path,
-					Mode: -1,
+					Src:             src,
+					Dest:            target.Path,
+					Mode:            -1,
+					ExcludePatterns: input.ExcludePatterns,
 				},
 			},
 		}
@@ -299,7 +303,7 @@ func canMerge(target MergeInput, inputs []*MergeInput) bool {
 	}
 
 	for _, input := range inputs {
-		if input.Path != "" {
+		if input.Path != "" || len(input.ExcludePatterns) > 0 {
 			return false
 		}
 	}

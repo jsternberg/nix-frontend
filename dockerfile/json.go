@@ -38,9 +38,10 @@ type FileOp struct {
 }
 
 type FSEntry struct {
-	Source string `json:"source,omitempty"`
-	Text   string `json:"text,omitempty"`
-	Mode   string `json:"mode,omitempty"`
+	Source  string   `json:"source,omitempty"`
+	Text    string   `json:"text,omitempty"`
+	Mode    string   `json:"mode,omitempty"`
+	Exclude []string `json:"exclude,omitempty"`
 }
 
 type MergeOp struct {
