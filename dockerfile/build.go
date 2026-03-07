@@ -92,7 +92,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		}
 
 		for k, st := range inputs {
-			dest := filepath.Join("/nix/var/nix/profiles/per-user/root/channels", k)
+			dest := filepath.Join("/nix/var/nix", k)
 			runOpts = append(runOpts, llb.AddMount(dest, st))
 		}
 
