@@ -10,19 +10,22 @@ let
   factoryFunc = {
     repository,
     version,
+    systemPackages ? [],
   }: {
     image = lib.llb.image "${repository}:${version}";
 
-    installSystemPackages = systemPackages:
+    installSystemPackages = extraSystemPackages:
       let
-        packages = builtins.concatStringsSep " " systemPackages;
-      in
-      lib.llb.run {
-        env.DEBIAN_FRONTEND = "noninteractive";
+        allSystemPackages = systemPackages ++ extraSystemPackages;
+        packages = builtins.concatStringsSep " " allSystemPackages;
+        impl = lib.llb.run {
+          env.DEBIAN_FRONTEND = "noninteractive";
 
-        mounts."/var/lib/apt/lists".type = "tmpfs";
-        mounts."/var/cache/apt".type = "tmpfs";
-      } "apt-get update && apt-get install -y --no-install-recommends ${packages}";
+          mounts."/var/lib/apt/lists".type = "tmpfs";
+          mounts."/var/cache/apt".type = "tmpfs";
+        } "apt-get update && apt-get install -y --no-install-recommends ${packages}";
+      in
+      lib.optional (allSystemPackages != []) impl;
   };
 
   base = lib.system.makeFactory factoryFunc cfg;

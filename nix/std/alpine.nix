@@ -10,11 +10,16 @@ let
   factoryFunc = {
     repository ? cfg.repository,
     version ? cfg.version,
+    systemPackages ? [],
   }: {
     image = lib.llb.image "${repository}:${version}";
 
-    installSystemPackages = systemPackages:
-      lib.llb.run (["apk" "add" "--no-cache"] ++ systemPackages);
+    installSystemPackages = extraSystemPackages:
+      let
+        allSystemPackages = systemPackages ++ extraSystemPackages;
+        impl = lib.llb.run (["apk" "add" "--no-cache"] ++ allSystemPackages);
+      in
+      lib.optional (allSystemPackages != []) impl;
   };
 in
 lib.system.makeFactory factoryFunc defaultConfig

@@ -1,8 +1,13 @@
-{ lib, config, ... }:
+{ lib, config, std, ... }:
 
 rec {
-  image = lib.llb.image "docker.io/library/golang:1.25-alpine3.21";
+  alpine = std.alpine.override ({version, ...}: {
+    repository = "docker.io/library/golang";
+    version = "1.25-alpine${version}";
+  });
+
   build = {
+    system ? alpine,
     packages ? ["./cmd/..."],
     testPackages ? ["./..."],
     cgo ? false,
@@ -25,15 +30,14 @@ rec {
     mkBuildEnv = platform:
       let
         packages = lib.optional useXX (x: x ++ ["clang" "lld" "musl-dev" "pkgconfig"]) ["git"];
-        step1 = lib.optional useXX
-          (s: s.override { inherit platform; })
-          image;
-        step2 = lib.llb.run {} (["apk" "add" "--no-cache"] ++ packages) step1;
-        step3 = lib.optional useXX (p: lib.llb.file p {
+        step1 = system.setup {
+          systemPackages = packages;
+        };
+        step2 = lib.optional useXX (p: lib.llb.file p {
           "/".source = xx;
-        }) step2;
+        }) step1;
       in
-      step3;
+      step2;
 
     buildEnv = mkBuildEnv config.build;
     testEnv = mkBuildEnv config.target;
@@ -121,7 +125,7 @@ rec {
       };
     } validateVendorCommand;
 
-    validateVendorStage = doValidateVendor (lib.llb.image "docker.io/library/alpine:3.21");
+    validateVendorStage = doValidateVendor system;
 
     binaries = {
       outPath = "${buildStage}/out";

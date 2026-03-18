@@ -15,7 +15,7 @@ let
           packages ? [],
         }:
         let
-          step1 = lib.optional (systemPackages != []) (installSystemPackages systemPackages) image;
+          step1 = installSystemPackages systemPackages image;
 
           # TODO: I want to reimplement this in a more robust way.
           # Gonna keep this implementation for now.

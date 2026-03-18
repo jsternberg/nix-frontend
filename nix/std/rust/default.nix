@@ -1,15 +1,20 @@
-{ lib, config, ... }:
+{ lib, config, std, ... }:
 
 let
-  version = "1.93.1";
-  image = lib.llb.image "docker.io/library/rust:${version}-alpine3.23";
+  rust-version = "1.93.1";
 in
-{
+rec {
+  alpine = std.alpine.override ({version, ...}: {
+    repository = "docker.io/library/rust";
+    version = "${rust-version}-alpine${version}";
+  });
+
   build = {
+    system ? alpine,
     profile ? "release",
   }:
     let
-      buildEnv = image;
+      buildEnv = system.setup {};
 
       app = (lib.llb.local "context").override {
         # Common to accidentally have the target directory from a local invocation
