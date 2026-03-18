@@ -44,7 +44,14 @@ rec {
         "/cargo/registry".type = "cache";
       };
 
-      buildCommand = [ "cargo" "build" "--${profile}" ];
+      buildCommand = if profile == "release"
+        then
+          [ "cargo" "build" "--release" ]
+        else if profile == "debug" then
+          [ "cargo" "build" ]
+        else
+          [ "cargo" "build" "--profile=${profile}" ];
+
       doBuild = lib.llb.run {
         inherit env workdir;
         mounts = defaultMounts // {
