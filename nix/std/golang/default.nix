@@ -118,14 +118,14 @@ rec {
     validateVendorCommand = ["diff" "-u" "/a" "/b"];
     doValidateVendor = lib.llb.run {
       mounts = {
-        "/a".input = (lib.llb.local "context").override {
-          attrs.followpaths = ["go.mod" "go.sum" "vendor"];
+        "/a".input = (lib.llb.context).override {
+          attrs."local.followpaths" = ["go.mod" "go.sum" "vendor"];
         };
         "/b".input = "${vendorStage}/out";
       };
     } validateVendorCommand;
 
-    validateVendorStage = doValidateVendor system;
+    validateVendorStage = doValidateVendor (system.setup {});
 
     binaries = {
       outPath = "${buildStage}/out";

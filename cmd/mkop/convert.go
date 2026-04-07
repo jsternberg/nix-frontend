@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -17,24 +16,11 @@ import (
 )
 
 func convertSourceOp(in *dockerfile.SourceOp) (*pb.Op, error) {
-	var attrs map[string]string
-	if len(in.Attributes) > 0 {
-		u, err := url.Parse(in.Identifier)
-		if err != nil {
-			return nil, err
-		}
-
-		attrs = make(map[string]string)
-		for k, v := range in.Attributes {
-			attrs[fmt.Sprintf("%s.%s", u.Scheme, k)] = v
-		}
-	}
-
 	return &pb.Op{
 		Op: &pb.Op_Source{
 			Source: &pb.SourceOp{
 				Identifier: in.Identifier,
-				Attrs:      attrs,
+				Attrs:      in.Attributes,
 			},
 		},
 	}, nil

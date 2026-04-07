@@ -18,7 +18,7 @@
   let
     # Use cgo when building go project. Use normal defaults.
     project = std.golang.build { cgo = true; };
-    context = lib.llb.local "context";
+    context = lib.llb.context;
   in
   rec {
     # Only include binaries and test targets.

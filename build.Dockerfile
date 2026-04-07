@@ -18,6 +18,7 @@ COPY --from=dockerfile /out/ /
 
 FROM alpine:${ALPINE_VERSION} AS alpine-base
 FROM alpine-base AS frontend
+LABEL moby.buildkit.frontend.caps="moby.buildkit.frontend.inputs,moby.buildkit.frontend.contexts,moby.buildkit.frontend.subrequests"
 RUN apk add --no-cache nix
 COPY ./nix/dockerfile /nix/var/nix/dockerfile
 COPY ./nix/std /nix/var/nix/std
