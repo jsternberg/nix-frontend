@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -29,6 +30,11 @@ import (
 const PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 func Build(ctx context.Context, c client.Client) (*client.Result, error) {
+	opts := c.BuildOpts().Opts
+	if _, ok := opts["filename"]; !ok {
+		opts["filename"] = "dockerfile.nix"
+	}
+
 	bc, err := dockerui.NewClient(c)
 	if err != nil {
 		return nil, err
@@ -48,14 +54,19 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		frontendImg = baseImg.AddEnv("PATH", PATH)
 	}
 
-	inputs, err := resolveInputs(ctx, c, frontendImg)
+	src, err := bc.ReadEntrypoint(ctx, "dockerfile-nix")
+	if err != nil {
+		return nil, err
+	}
+
+	inputs, err := resolveInputs(ctx, c, src, frontendImg)
 	if err != nil {
 		return nil, err
 	}
 
 	runArgs := []string{
 		"nix-solve",
-		"-f", "/src/dockerfile.nix",
+		"-f", path.Join("/src", path.Base(src.Filename)),
 		"-t", bc.Target,
 		"-o", "/result/dockerfile.json",
 		"-c", "/inputs/config.json",
@@ -82,9 +93,9 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		}
 
 		runOpts := []llb.RunOption{
-			llb.WithCustomNamef("[dockerfile] resolving %s", "dockerfile.nix"),
+			llb.WithCustomNamef("[dockerfile] resolving %s", src.Filename),
 			llb.Args(runArgs),
-			llb.AddMount("/src", llb.Local("dockerfile", llb.FollowPaths([]string{"dockerfile.nix"}))),
+			llb.AddMount("/src", *src.State),
 			llb.AddMount("/inputs", llb.Scratch().
 				File(
 					llb.Mkfile("config.json", 0o444, configuration),
@@ -426,17 +437,17 @@ func resolveContexts(ctx context.Context, bc *dockerui.Client, gr *graph, tp oci
 	return nil
 }
 
-func resolveInputs(ctx context.Context, c client.Client, frontendImg llb.State) (map[string]llb.State, error) {
+func resolveInputs(ctx context.Context, c client.Client, src *dockerui.Source, frontendImg llb.State) (map[string]llb.State, error) {
 	runArgs := []string{
 		"nix-resolve-inputs",
-		"-f", "/src/dockerfile.nix",
+		"-f", path.Join("/src", path.Base(src.Filename)),
 		"-o", "/result/inputs.json",
 	}
 
 	runOpts := []llb.RunOption{
-		llb.WithCustomNamef("[dockerfile] resolving inputs for %s", "dockerfile.nix"),
+		llb.WithCustomNamef("[dockerfile] resolving inputs for %s", src.Filename),
 		llb.Args(runArgs),
-		llb.AddMount("/src", llb.Local("dockerfile", llb.FollowPaths([]string{"dockerfile.nix"}))),
+		llb.AddMount("/src", *src.State),
 		llb.AddMount("/nix/store", llb.Scratch(), llb.AsPersistentCacheDir("nix-frontend-store", llb.CacheMountShared)),
 	}
 
