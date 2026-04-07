@@ -3,7 +3,9 @@ package dockerfile
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -15,6 +17,7 @@ import (
 	"github.com/moby/buildkit/client/llb/sourceresolver"
 	"github.com/moby/buildkit/frontend/dockerui"
 	"github.com/moby/buildkit/frontend/gateway/client"
+	"github.com/moby/buildkit/frontend/subrequests/convertllb"
 	"github.com/moby/buildkit/solver/pb"
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	"github.com/opencontainers/go-digest"
@@ -55,7 +58,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		"-f", "/src/dockerfile.nix",
 		"-t", bc.Target,
 		"-o", "/result/dockerfile.json",
-		"-a", "/inputs/args.json",
+		"-c", "/inputs/config.json",
 	}
 
 	var bp ocispecs.Platform
@@ -65,7 +68,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		bp = platforms.DefaultSpec()
 	}
 
-	res, err := bc.Build(ctx, func(ctx context.Context, platform *ocispecs.Platform, idx int) (r client.Reference, img *dockerspec.DockerOCIImage, baseImg *dockerspec.DockerOCIImage, err error) {
+	toSolveRequest := func(ctx context.Context, platform *ocispecs.Platform, idx int) (client.SolveRequest, *dockerspec.DockerOCIImage, error) {
 		var tp ocispecs.Platform
 		if platform != nil {
 			tp = *platform
@@ -73,9 +76,9 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 			tp = bp
 		}
 
-		args, err := json.Marshal(getBuildArgs(bc, bp, tp))
+		configuration, err := json.Marshal(getConfiguration(bc, bp, tp))
 		if err != nil {
-			return nil, nil, nil, err
+			return client.SolveRequest{}, nil, err
 		}
 
 		runOpts := []llb.RunOption{
@@ -84,7 +87,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 			llb.AddMount("/src", llb.Local("dockerfile", llb.FollowPaths([]string{"dockerfile.nix"}))),
 			llb.AddMount("/inputs", llb.Scratch().
 				File(
-					llb.Mkfile("args.json", 0o444, args),
+					llb.Mkfile("config.json", 0o444, configuration),
 				),
 				llb.Readonly,
 			),
@@ -102,7 +105,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 
 		def, err := st.Marshal(ctx)
 		if err != nil {
-			return nil, nil, nil, err
+			return client.SolveRequest{}, nil, err
 		}
 
 		req := client.SolveRequest{
@@ -110,50 +113,82 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		}
 		res, err := c.Solve(ctx, req)
 		if err != nil {
-			return nil, nil, nil, err
+			return client.SolveRequest{}, nil, err
 		}
 
 		ref, err := res.SingleRef()
 		if err != nil {
-			return nil, nil, nil, err
+			return client.SolveRequest{}, nil, err
 		}
 
 		in, err := ref.ReadFile(ctx, client.ReadRequest{
 			Filename: "dockerfile.json",
 		})
 		if err != nil {
-			return nil, nil, nil, err
+			return client.SolveRequest{}, nil, err
 		}
 
 		outDef := &pb.Definition{}
 		if err := protojson.Unmarshal(in, outDef); err != nil {
-			return nil, nil, nil, err
+			return client.SolveRequest{}, nil, err
 		}
 
 		gr, err := newGraph(outDef)
 		if err != nil {
-			return nil, nil, nil, err
+			return client.SolveRequest{}, nil, err
 		}
 
-		img, err = resolveImages(ctx, c, gr, tp)
+		if err := resolveContexts(ctx, bc, gr, tp); err != nil {
+			return client.SolveRequest{}, nil, err
+		}
+
+		img, err := resolveImages(ctx, c, gr, tp)
 		if err != nil {
-			return nil, nil, nil, err
+			return client.SolveRequest{}, nil, err
 		}
 
 		outDef, err = gr.ToDef()
 		if err != nil {
-			return nil, nil, nil, err
+			return client.SolveRequest{}, nil, err
 		}
 
-		res, err = c.Solve(ctx, client.SolveRequest{
+		solveReq := client.SolveRequest{
 			Definition: outDef,
-		})
+		}
+		return solveReq, img, nil
+	}
+
+	if res, ok, err := bc.HandleSubrequest(ctx, dockerui.RequestHandler{
+		ConvertLLB: func(ctx context.Context) (*convertllb.Result, error) {
+			req, _, err := toSolveRequest(ctx, &bp, 0)
+			if err != nil {
+				return nil, err
+			}
+			return convertLLBResult(req)
+		},
+	}); err != nil {
+		return nil, err
+	} else if ok {
+		return res, nil
+	}
+
+	res, err := bc.Build(ctx, func(ctx context.Context, platform *ocispecs.Platform, idx int) (*dockerui.BuildResult, error) {
+		req, img, err := toSolveRequest(ctx, platform, idx)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, err
 		}
 
-		r, err = res.SingleRef()
-		return r, img, nil, err
+		res, err := c.Solve(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+
+		r, err := res.SingleRef()
+		return &dockerui.BuildResult{
+			Reference: r,
+			Image:     img,
+			BaseImage: img,
+		}, nil
 	})
 	if err != nil {
 		return nil, err
@@ -279,7 +314,9 @@ func resolveImageConfigs(ctx context.Context, c client.Client, gr *graph, tp oci
 
 			eg.Go(func() error {
 				ref, dgst, dt, err := c.ResolveImageConfig(ctx, refName, sourceresolver.Opt{
-					Platform: &platform,
+					ImageOpt: &sourceresolver.ResolveImageOpt{
+						Platform: &platform,
+					},
 				})
 				if err != nil {
 					return err
@@ -312,6 +349,81 @@ func resolveImageConfigs(ctx context.Context, c client.Client, gr *graph, tp oci
 		out[k.(string)] = v.(*Image)
 	}
 	return out, nil
+}
+
+func resolveContexts(ctx context.Context, bc *dockerui.Client, gr *graph, tp ocispecs.Platform) error {
+	for _, v := range gr.All() {
+		switch o := v.Op.Op.(type) {
+		case *pb.Op_Source:
+			u, err := url.Parse(o.Source.Identifier)
+			if err != nil {
+				continue
+			}
+
+			if u.Scheme != "context" {
+				continue
+			}
+			name := u.Host
+
+			var st *llb.State
+			if name == "context" {
+				st, err = bc.MainContext(ctx)
+				if err != nil {
+					return err
+				}
+			} else {
+				nc, err := bc.NamedContext(name, dockerui.ContextOpt{
+					Platform: &tp,
+				})
+				if err != nil {
+					return err
+				}
+
+				st, _, err = nc.Load(ctx)
+				if err != nil {
+					return err
+				}
+			}
+
+			constraints := &llb.Constraints{}
+			vtx := st.Output().Vertex(ctx, constraints)
+			if len(vtx.Inputs()) != 0 {
+				return errors.New("expected context to have no inputs")
+			}
+
+			// This seems to be the only way to get the op out of the interface
+			// is to marshal it and then unmarshal it back out. Can probably
+			// improve this so we just store the marshaled output and use it directly
+			// since this is going to just get marshaled again later anyway.
+			// But it messes too much with the flow control to bother with that right now.
+			_, dt, _, _, err := vtx.Marshal(ctx, constraints)
+			if err != nil {
+				return err
+			}
+
+			var newOp pb.Op
+			if err := newOp.Unmarshal(dt); err != nil {
+				return err
+			}
+
+			// Inherit the attributes from the original source.
+			if newOp, ok := newOp.Op.(*pb.Op_Source); ok {
+				if u, err := url.Parse(newOp.Source.Identifier); err == nil {
+					prefix := u.Scheme + "."
+					for k, v := range o.Source.Attrs {
+						if strings.HasPrefix(k, prefix) {
+							if newOp.Source.Attrs == nil {
+								newOp.Source.Attrs = make(map[string]string)
+							}
+							newOp.Source.Attrs[k] = v
+						}
+					}
+				}
+			}
+			v.Op.Op = newOp.Op
+		}
+	}
+	return nil
 }
 
 func resolveInputs(ctx context.Context, c client.Client, frontendImg llb.State) (map[string]llb.State, error) {
@@ -378,6 +490,28 @@ func resolveInputs(ctx context.Context, c client.Client, frontendImg llb.State) 
 	return inputMap, nil
 }
 
+type Config struct {
+	BuildArgs map[string]string   `json:"build-arg"`
+	Contexts  map[string]struct{} `json:"contexts"`
+	Context   string              `json:"context"`
+}
+
+const contextPrefix = "context:"
+
+func getConfiguration(bc *dockerui.Client, bp, tp ocispecs.Platform) *Config {
+	config := &Config{}
+	config.BuildArgs = getBuildArgs(bc, bp, tp)
+
+	config.Contexts = make(map[string]struct{})
+	for key := range bc.BuildOpts().Opts {
+		if name, found := strings.CutPrefix(key, contextPrefix); found {
+			config.Contexts[name] = struct{}{}
+		}
+	}
+	config.Context = "context"
+	return config
+}
+
 func getBuildArgs(bc *dockerui.Client, bp, tp ocispecs.Platform) map[string]string {
 	s := [...][2]string{
 		{"buildOs", bp.OS},
@@ -416,4 +550,28 @@ func toLowerCamelCase(s string) string {
 
 type cf interface {
 	CurrentFrontend() (*llb.State, error)
+}
+
+func convertLLBResult(req client.SolveRequest) (*convertllb.Result, error) {
+	res := &convertllb.Result{
+		Def:      make(map[digest.Digest]*pb.Op),
+		Metadata: make(map[digest.Digest]llb.OpMetadata),
+		Source:   req.Definition.Source,
+	}
+	for _, def := range req.Definition.Def {
+		var op pb.Op
+		if err := op.Unmarshal(def); err != nil {
+			return nil, err
+		}
+
+		dgst := digest.FromBytes(def)
+		res.Def[dgst] = &op
+	}
+
+	for dgst, mpb := range req.Definition.Metadata {
+		var opMeta llb.OpMetadata
+		opMeta.FromPB(mpb)
+		res.Metadata[digest.Digest(dgst)] = opMeta
+	}
+	return res, nil
 }

@@ -1,22 +1,24 @@
 {
   system ? builtins.currentSystem,
-  argsfile ? null,
-  configuration,
+  configuration ? null,
+  dockerfile,
 }:
 
 let
+  args = if configuration != null
+    then builtins.fromJSON (builtins.readFile configuration)
+    else {};
+
+  buildArgs = args.build-arg or {};
+
   lib = (import ./utils.nix) // {
     llb = import ./llb {
-      inherit lib system;
+      inherit lib system args;
       config = mergedConfig;
     };
     platform = import ./platform.nix mergedConfig;
     system = import ./system.nix lib;
   };
-
-  args = if argsfile != null
-    then builtins.fromJSON (builtins.readFile argsfile)
-    else {};
 
   mkDefaultConfig = {
     buildOs ? null,
@@ -50,14 +52,15 @@ let
     inherit build target;
   };
 
-  mergedConfig = (mkDefaultConfig args) // (config.config or {});
-  allArgs = args // {
-    inherit lib args;
+  mergedConfig = (mkDefaultConfig buildArgs) // (config.config or {});
+  allArgs = buildArgs // {
+    inherit lib;
+    args = buildArgs;
     config = mergedConfig;
   };
   config = let
-    f = import configuration;
-    filteredArgs = builtins.intersectAttrs (builtins.functionArgs f) args;
+    f = import dockerfile;
+    filteredArgs = builtins.intersectAttrs (builtins.functionArgs f) buildArgs;
   in
     f filteredArgs;
 

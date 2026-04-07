@@ -48,7 +48,7 @@ in
 
     qmk-base = lib.llb.run "python3 -m venv /opt/qmk && /opt/qmk/bin/pip install qmk && ln -s /opt/qmk/bin/qmk /usr/local/bin/qmk" base;
 
-    defaultSource = lib.llb.local "context";
+    defaultSource = lib.llb.context;
     userSource = if source != null then source else defaultSource;
 
     buildStep = lib.llb.run {

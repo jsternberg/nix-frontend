@@ -16,10 +16,10 @@ rec {
     let
       buildEnv = system.setup {};
 
-      app = (lib.llb.local "context").override {
+      app = (lib.llb.context).override {
         # Common to accidentally have the target directory from a local invocation
         # so just exclude it here in case it is present.
-        attrs.excludepatterns = [ "target" ];
+        attrs."local.excludepatterns" = [ "target" ];
       };
 
       env = {

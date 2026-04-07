@@ -1,6 +1,7 @@
 {
   lib,
   config,
+  args,
   system ? builtins.currentSystem,
 }:
 
@@ -58,11 +59,11 @@ let
     source = {
       identifier = "git://${id}";
       attrs = {
-        "fullurl" = url;
-      }
-      // (if keepGitDir then { "keepgitdir" = true; } else {})
-      // (if skipSubmodules then { "skipsubmodules" = true; } else {})
-      // (if checksum != null then { "checksum" = checksum; } else {});
+        "git.fullurl" = url;
+        ${if keepGitDir then "git.keepgitdir" else null} = true;
+        ${if skipSubmodules then "git.skipsubmodules" else null} = true;
+        ${if checksum != null then "git.checksum" else null} = checksum;
+      };
     };
   });
 
@@ -112,8 +113,16 @@ let
   toAttrStr = v: if builtins.isString v
     then v
     else builtins.toJSON v;
+
+  contexts = builtins.mapAttrs (name: _: mkSource {
+    identifier = "context://${name}";
+  }) (args.contexts or {});
 in
 rec {
+  context = mkSource {
+    identifier = "context://${args.context or "context"}";
+  };
+
   local = name: mkSource {
     identifier = "local://${name}";
   };
