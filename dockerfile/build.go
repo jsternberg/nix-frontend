@@ -3,7 +3,6 @@ package dockerfile
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/url"
 	"path"
@@ -79,7 +78,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		bp = platforms.DefaultSpec()
 	}
 
-	toSolveRequest := func(ctx context.Context, platform *ocispecs.Platform, idx int) (client.SolveRequest, *dockerspec.DockerOCIImage, error) {
+	toSolveRequest := func(ctx context.Context, platform *ocispecs.Platform) (client.SolveRequest, *dockerspec.DockerOCIImage, error) {
 		var tp ocispecs.Platform
 		if platform != nil {
 			tp = *platform
@@ -171,7 +170,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 
 	if res, ok, err := bc.HandleSubrequest(ctx, dockerui.RequestHandler{
 		ConvertLLB: func(ctx context.Context) (*convertllb.Result, error) {
-			req, _, err := toSolveRequest(ctx, &bp, 0)
+			req, _, err := toSolveRequest(ctx, &bp)
 			if err != nil {
 				return nil, err
 			}
@@ -183,8 +182,8 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		return res, nil
 	}
 
-	res, err := bc.Build(ctx, func(ctx context.Context, platform *ocispecs.Platform, idx int) (*dockerui.BuildResult, error) {
-		req, img, err := toSolveRequest(ctx, platform, idx)
+	res, err := bc.Build(ctx, func(ctx context.Context, platform *ocispecs.Platform, _ int) (*dockerui.BuildResult, error) {
+		req, img, err := toSolveRequest(ctx, platform)
 		if err != nil {
 			return nil, err
 		}
@@ -219,9 +218,9 @@ func resolveImages(ctx context.Context, c client.Client, gr *graph, tp ocispecs.
 		return nil, err
 	}
 
-	for dgst, v := range gr.All() {
+	for dgst, n := range gr.All() {
 		var img *Image
-		switch o := v.Op.Op.(type) {
+		switch o := n.op.Op.(type) {
 		case *pb.Op_Source:
 			if !strings.HasPrefix(o.Source.Identifier, "docker-image://") {
 				continue
@@ -232,7 +231,7 @@ func resolveImages(ctx context.Context, c client.Client, gr *graph, tp ocispecs.
 		case *pb.Op_Exec:
 			for _, m := range o.Exec.Mounts {
 				if m.Dest == "/" && m.Input >= 0 {
-					inp := v.Op.Inputs[m.Input]
+					inp := n.op.Inputs[m.Input]
 					if img = imgs[inp.Digest]; img != nil {
 						config := img.Config
 						if o.Exec.Meta.Cwd == "" {
@@ -247,27 +246,29 @@ func resolveImages(ctx context.Context, c client.Client, gr *graph, tp ocispecs.
 				}
 			}
 		default:
-			if len(v.Op.Inputs) > 0 {
-				inp := v.Op.Inputs[0]
+			if len(n.op.Inputs) > 0 {
+				inp := n.op.Inputs[0]
 				img = imgs[inp.Digest]
 			}
 		}
 
-		if img != nil {
-			// Any attributes to update?
-			if dt, ok := v.Meta.Description["oci.image.config"]; ok {
-				var config dockerspec.DockerOCIImageConfig
-				if err := json.Unmarshal([]byte(dt), &config); err != nil {
-					return nil, err
-				}
-
-				// Merge in attributes from the config.
-				cloneImg := *img
-				mergeImageConfig(&cloneImg.Config, &config)
-				img = &cloneImg
-			}
-			imgs[string(dgst)] = img
+		if img == nil {
+			continue
 		}
+
+		// Any attributes to update?
+		if dt, ok := n.meta.Description["oci.image.config"]; ok {
+			var config dockerspec.DockerOCIImageConfig
+			if err := json.Unmarshal([]byte(dt), &config); err != nil {
+				return nil, err
+			}
+
+			// Merge in attributes from the config.
+			cloneImg := *img
+			mergeImageConfig(&cloneImg.Config, &config)
+			img = &cloneImg
+		}
+		imgs[string(dgst)] = img
 	}
 
 	head, _ := gr.Head()
@@ -363,8 +364,8 @@ func resolveImageConfigs(ctx context.Context, c client.Client, gr *graph, tp oci
 }
 
 func resolveContexts(ctx context.Context, bc *dockerui.Client, gr *graph, tp ocispecs.Platform) error {
-	for _, v := range gr.All() {
-		switch o := v.Op.Op.(type) {
+	for _, n := range gr.All() {
+		switch o := n.op.Op.(type) {
 		case *pb.Op_Source:
 			u, err := url.Parse(o.Source.Identifier)
 			if err != nil {
@@ -396,42 +397,9 @@ func resolveContexts(ctx context.Context, bc *dockerui.Client, gr *graph, tp oci
 				}
 			}
 
-			constraints := &llb.Constraints{}
-			vtx := st.Output().Vertex(ctx, constraints)
-			if len(vtx.Inputs()) != 0 {
-				return errors.New("expected context to have no inputs")
-			}
-
-			// This seems to be the only way to get the op out of the interface
-			// is to marshal it and then unmarshal it back out. Can probably
-			// improve this so we just store the marshaled output and use it directly
-			// since this is going to just get marshaled again later anyway.
-			// But it messes too much with the flow control to bother with that right now.
-			_, dt, _, _, err := vtx.Marshal(ctx, constraints)
-			if err != nil {
+			if err := n.Replace(ctx, *st); err != nil {
 				return err
 			}
-
-			var newOp pb.Op
-			if err := newOp.Unmarshal(dt); err != nil {
-				return err
-			}
-
-			// Inherit the attributes from the original source.
-			if newOp, ok := newOp.Op.(*pb.Op_Source); ok {
-				if u, err := url.Parse(newOp.Source.Identifier); err == nil {
-					prefix := u.Scheme + "."
-					for k, v := range o.Source.Attrs {
-						if strings.HasPrefix(k, prefix) {
-							if newOp.Source.Attrs == nil {
-								newOp.Source.Attrs = make(map[string]string)
-							}
-							newOp.Source.Attrs[k] = v
-						}
-					}
-				}
-			}
-			v.Op.Op = newOp.Op
 		}
 	}
 	return nil
