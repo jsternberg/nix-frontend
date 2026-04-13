@@ -178,8 +178,24 @@ func (n *graphNode) Replace(ctx context.Context, st llb.State) error {
 		if len(op.Inputs) != len(n.inputs) {
 			return errors.New("replacement node has a different number of inputs than the original")
 		}
+
+		if srcOp, ok := n.op.Op.(*pb.Op_Source); ok && len(srcOp.Source.Attrs) > 0 {
+			if destOp, ok := op.Op.(*pb.Op_Source); ok {
+				if destOp.Source.Attrs == nil {
+					destOp.Source.Attrs = make(map[string]string)
+				}
+				maps.Copy(destOp.Source.Attrs, srcOp.Source.Attrs)
+			}
+		}
 		n.op = &op
-		n.meta = def.Metadata[digest.FromBytes(p)]
+
+		mergedMeta := def.Metadata[digest.FromBytes(p)]
+		if mergedMeta.Description == nil {
+			mergedMeta.Description = n.meta.Description
+		} else {
+			maps.Copy(mergedMeta.Description, n.meta.Description)
+		}
+		n.meta = mergedMeta
 		return nil
 	}
 
@@ -196,6 +212,15 @@ func (n *graphNode) Replace(ctx context.Context, st llb.State) error {
 		var op pb.Op
 		if err := op.Unmarshal(p); err != nil {
 			return err
+		}
+
+		if srcOp, ok := n.op.Op.(*pb.Op_Source); ok && len(srcOp.Source.Attrs) > 0 {
+			if destOp, ok := op.Op.(*pb.Op_Source); ok {
+				if destOp.Source.Attrs == nil {
+					destOp.Source.Attrs = make(map[string]string)
+				}
+				maps.Copy(destOp.Source.Attrs, srcOp.Source.Attrs)
+			}
 		}
 
 		node := &graphNode{
