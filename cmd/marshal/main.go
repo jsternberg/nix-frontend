@@ -71,7 +71,13 @@ func convert(specs map[string]*Vertex, order []string) (*pb.Definition, error) {
 	}
 	outputs := make(map[string]*pb.Input)
 
+	live := determineLiveReferences(specs, order)
 	for _, path := range order {
+		if _, ok := live[path]; !ok {
+			// Not a live reference so ignore.
+			continue
+		}
+
 		if _, ok := outputs[path]; ok {
 			continue
 		}
@@ -170,6 +176,31 @@ func unrollTrivialMerges(specs map[string]*Vertex, order []string) {
 			}
 		}
 	}
+}
+
+func determineLiveReferences(specs map[string]*Vertex, order []string) map[string]struct{} {
+	unvisited := []string{order[len(order)-1]}
+	live := make(map[string]struct{})
+
+	for len(unvisited) > 0 {
+		path := unvisited[0]
+		unvisited = unvisited[1:]
+
+		if _, ok := live[path]; ok {
+			// Don't need to revisit.
+			continue
+		}
+		live[path] = struct{}{}
+
+		if v := specs[path]; v != nil {
+			for _, inp := range v.Op.Inputs {
+				if _, ok := live[inp.Digest]; !ok {
+					unvisited = append(unvisited, inp.Digest)
+				}
+			}
+		}
+	}
+	return live
 }
 
 func marshal(out io.Writer, infile string) error {
