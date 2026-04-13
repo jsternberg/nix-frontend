@@ -113,15 +113,15 @@ let
   toAttrStr = v: if builtins.isString v
     then v
     else builtins.toJSON v;
-
-  contexts = builtins.mapAttrs (name: _: mkSource {
-    identifier = "context://${name}";
-  }) (args.contexts or {});
 in
 rec {
   context = mkSource {
     identifier = "context://${args.context or "context"}";
   };
+
+  contexts = builtins.mapAttrs (name: _: mkSource {
+    identifier = "context://${name}";
+  }) (args.contexts or {});
 
   local = name: mkSource {
     identifier = "local://${name}";
