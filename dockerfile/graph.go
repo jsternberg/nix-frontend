@@ -10,12 +10,14 @@ import (
 
 	"github.com/moby/buildkit/client/llb"
 	"github.com/moby/buildkit/solver/pb"
+	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	"github.com/opencontainers/go-digest"
 )
 
 type graph struct {
 	nodeByDigest map[digest.Digest]*graphNode
 	digestOrder  []digest.Digest
+	head         *graphNode
 }
 
 type graphNode struct {
@@ -25,6 +27,7 @@ type graphNode struct {
 	dgst    digest.Digest
 	op      *pb.Op
 	meta    llb.OpMetadata
+	image   *dockerspec.DockerOCIImage
 }
 
 func newGraph(def *pb.Definition) (*graph, error) {
@@ -32,7 +35,8 @@ func newGraph(def *pb.Definition) (*graph, error) {
 		nodeByDigest: make(map[digest.Digest]*graphNode),
 		digestOrder:  make([]digest.Digest, 0, len(def.Def)),
 	}
-	for _, p := range def.Def {
+
+	for i, p := range def.Def {
 		dgst := digest.FromBytes(p)
 		g.digestOrder = append(g.digestOrder, dgst)
 
@@ -50,6 +54,10 @@ func newGraph(def *pb.Definition) (*graph, error) {
 			node.meta.FromPB(meta)
 		}
 		g.nodeByDigest[dgst] = node
+
+		if i == len(def.Def)-1 {
+			g.head = node
+		}
 	}
 
 	// Link all of the inputs and outputs.
@@ -67,8 +75,11 @@ func newGraph(def *pb.Definition) (*graph, error) {
 }
 
 func (g *graph) Head() (digest.Digest, *pb.Op) {
-	dgst := g.digestOrder[len(g.digestOrder)-1]
-	return digest.Digest(dgst), g.nodeByDigest[dgst].op
+	if g.head == nil || len(g.head.inputs) == 0 {
+		return "", nil
+	}
+	last := g.head.inputs[0]
+	return last.dgst, last.op
 }
 
 func (g *graph) All() iter.Seq2[digest.Digest, *graphNode] {
@@ -82,13 +93,16 @@ func (g *graph) All() iter.Seq2[digest.Digest, *graphNode] {
 	}
 }
 
-func (g *graph) Walk(fn func(op *pb.Op) error) error {
-	for _, n := range g.All() {
-		if err := fn(n.op); err != nil {
-			return err
+func (g *graph) Roots() iter.Seq2[digest.Digest, *graphNode] {
+	return func(yield func(digest.Digest, *graphNode) bool) {
+		for dgst, n := range g.All() {
+			if len(n.op.Inputs) == 0 {
+				if !yield(dgst, n) {
+					return
+				}
+			}
 		}
 	}
-	return nil
 }
 
 func (g *graph) ToDef() (*pb.Definition, error) {
@@ -121,15 +135,8 @@ func (g *graph) digestOrdering() []digest.Digest {
 		return g.digestOrder
 	}
 
-	var unvisited []*graphNode
+	unvisited := []*graphNode{g.head}
 	visited := make(map[*graphNode]struct{})
-
-	digests := slices.Collect(maps.Keys(g.nodeByDigest))
-	for _, dgst := range digests {
-		if node := g.nodeByDigest[dgst]; len(node.inputs) == 0 {
-			unvisited = append(unvisited, node)
-		}
-	}
 
 	for len(unvisited) > 0 {
 		node := unvisited[0]
@@ -138,24 +145,23 @@ func (g *graph) digestOrdering() []digest.Digest {
 		g.digestOrder = append(g.digestOrder, node.dgst)
 		visited[node] = struct{}{}
 
-		for _, output := range node.outputs {
-			if _, ok := visited[output]; ok {
-				continue
-			}
-
+		for _, inp := range node.inputs {
+			// Check if all outputs for this input have been visited.
+			// If they have, we can visit this node.
 			canVisit := true
-			for _, inp := range output.inputs {
-				if _, ok := visited[inp]; !ok {
+			for _, out := range inp.outputs {
+				if _, ok := visited[out]; !ok {
 					canVisit = false
 					break
 				}
 			}
 
 			if canVisit {
-				unvisited = append(unvisited, output)
+				unvisited = append(unvisited, inp)
 			}
 		}
 	}
+	slices.Reverse(g.digestOrder)
 	return g.digestOrder
 }
 
@@ -205,8 +211,17 @@ func (n *graphNode) Replace(ctx context.Context, st llb.State) error {
 		return errors.New("replacing arbitrary state only works with no inputs")
 	}
 
+	// Reset the digest order.
 	n.g.digestOrder = nil
-	for _, p := range def.Def {
+
+	head, err := def.Head()
+	if err != nil {
+		return err
+	}
+
+	// Create the new nodes from this definition.
+	nodeByDigest := make(map[digest.Digest]*graphNode)
+	for _, p := range def.Def[:len(def.Def)-1] {
 		dgst := digest.FromBytes(p)
 
 		var op pb.Op
@@ -223,14 +238,25 @@ func (n *graphNode) Replace(ctx context.Context, st llb.State) error {
 			}
 		}
 
-		node := &graphNode{
-			g:    n.g,
-			dgst: dgst,
-			op:   &op,
-			meta: def.Metadata[dgst],
+		var node *graphNode
+		if dgst == head {
+			// Reuse the node we're replacing so the inputs and outputs
+			// for other nodes remain valid.
+			node = n
+			node.inputs = nil
+		} else {
+			node = &graphNode{g: n.g}
 		}
-		for _, inp := range op.Inputs {
-			inpNode, ok := n.g.nodeByDigest[digest.Digest(inp.Digest)]
+		node.dgst = dgst
+		node.op = &op
+		node.meta = def.Metadata[dgst]
+		nodeByDigest[dgst] = node
+	}
+
+	// Link the new digests.
+	for dgst, node := range nodeByDigest {
+		for _, inp := range node.op.Inputs {
+			inpNode, ok := nodeByDigest[digest.Digest(inp.Digest)]
 			if !ok {
 				return fmt.Errorf("input digest %s for %s does not exist", inp.Digest, dgst)
 			}
@@ -238,5 +264,6 @@ func (n *graphNode) Replace(ctx context.Context, st llb.State) error {
 			node.inputs = append(node.inputs, inpNode)
 		}
 	}
+	maps.Copy(n.g.nodeByDigest, nodeByDigest)
 	return nil
 }

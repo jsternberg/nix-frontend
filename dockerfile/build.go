@@ -152,7 +152,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 			return client.SolveRequest{}, nil, err
 		}
 
-		img, err := resolveImages(ctx, c, gr, tp)
+		img, err := resolveImages(ctx, bc, c, gr, tp)
 		if err != nil {
 			return client.SolveRequest{}, nil, err
 		}
@@ -206,33 +206,21 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 	return res.Finalize()
 }
 
-type Image struct {
-	Ref    string
-	Digest digest.Digest
-	dockerspec.DockerOCIImage
-}
-
-func resolveImages(ctx context.Context, c client.Client, gr *graph, tp ocispecs.Platform) (*dockerspec.DockerOCIImage, error) {
-	imgs, err := resolveImageConfigs(ctx, c, gr, tp)
-	if err != nil {
+func resolveImages(ctx context.Context, bc *dockerui.Client, c client.Client, gr *graph, tp ocispecs.Platform) (*dockerspec.DockerOCIImage, error) {
+	if err := resolveImageConfigs(ctx, bc, c, gr, tp); err != nil {
 		return nil, err
 	}
 
-	for dgst, n := range gr.All() {
-		var img *Image
+	for _, n := range gr.All() {
+		var img *dockerspec.DockerOCIImage
 		switch o := n.op.Op.(type) {
 		case *pb.Op_Source:
-			if !strings.HasPrefix(o.Source.Identifier, "docker-image://") {
-				continue
-			}
-			ref := strings.TrimPrefix(o.Source.Identifier, "docker-image://")
-			img = imgs[ref]
-			o.Source.Identifier = "docker-image://" + img.Ref
+			img = n.image
 		case *pb.Op_Exec:
 			for _, m := range o.Exec.Mounts {
 				if m.Dest == "/" && m.Input >= 0 {
-					inp := n.op.Inputs[m.Input]
-					if img = imgs[inp.Digest]; img != nil {
+					inp := n.inputs[m.Input]
+					if img = inp.image; img != nil {
 						config := img.Config
 						if o.Exec.Meta.Cwd == "" {
 							o.Exec.Meta.Cwd = config.WorkingDir
@@ -246,9 +234,9 @@ func resolveImages(ctx context.Context, c client.Client, gr *graph, tp ocispecs.
 				}
 			}
 		default:
-			if len(n.op.Inputs) > 0 {
-				inp := n.op.Inputs[0]
-				img = imgs[inp.Digest]
+			if len(n.inputs) > 0 {
+				inp := n.inputs[0]
+				img = inp.image
 			}
 		}
 
@@ -268,12 +256,11 @@ func resolveImages(ctx context.Context, c client.Client, gr *graph, tp ocispecs.
 			mergeImageConfig(&cloneImg.Config, &config)
 			img = &cloneImg
 		}
-		imgs[string(dgst)] = img
+		n.image = img
 	}
 
-	head, _ := gr.Head()
-	if img := imgs[string(head)]; img != nil {
-		return &img.DockerOCIImage, nil
+	if img := gr.head.image; img != nil {
+		return img, nil
 	}
 	return nil, nil
 }
@@ -293,74 +280,74 @@ func mergeImageConfig(into, from *dockerspec.DockerOCIImageConfig) {
 	}
 }
 
-func resolveImageConfigs(ctx context.Context, c client.Client, gr *graph, tp ocispecs.Platform) (map[string]*Image, error) {
-	m := sync.Map{}
-	seen := make(map[string]struct{})
-
+func resolveImageConfigs(ctx context.Context, bc *dockerui.Client, c client.Client, gr *graph, tp ocispecs.Platform) error {
 	eg, ctx := errgroup.WithContext(ctx)
 	defer eg.Wait()
 
-	if err := gr.Walk(func(op *pb.Op) error {
+	for _, n := range gr.Roots() {
 		platform := tp
-		if op.Platform != nil {
-			platform = op.Platform.Spec()
+		if n.op.Platform != nil {
+			platform = n.op.Platform.Spec()
 		}
 
-		switch op := op.Op.(type) {
-		case *pb.Op_Source:
-			if !strings.HasPrefix(op.Source.Identifier, "docker-image://") {
-				return nil
-			}
+		if resolve := resolveImageConfigFunc(ctx, n, bc, c, platform); resolve != nil {
+			eg.Go(resolve)
+		}
+	}
+	return eg.Wait()
+}
 
-			refName := strings.TrimPrefix(op.Source.Identifier, "docker-image://")
-			named, err := reference.ParseNormalizedNamed(refName)
+func resolveImageConfigFunc(ctx context.Context, n *graphNode, bc *dockerui.Client, c client.Client, platform ocispecs.Platform) func() error {
+	op := n.op.Op.(*pb.Op_Source)
+	refName, found := strings.CutPrefix(op.Source.Identifier, "docker-image://")
+	if !found {
+		return nil
+	}
+	return resolveImageConfigDockerImageFunc(ctx, refName, n, op, bc, c, platform)
+}
+
+func resolveImageConfigDockerImageFunc(ctx context.Context, refName string, n *graphNode, op *pb.Op_Source, bc *dockerui.Client, c client.Client, platform ocispecs.Platform) func() error {
+	return func() error {
+		if nc, err := bc.NamedContext(refName, dockerui.ContextOpt{
+			Platform: &platform,
+		}); err != nil {
+			return err
+		} else if nc != nil {
+			st, img, err := nc.Load(ctx)
 			if err != nil {
 				return err
-			}
-			refName = reference.TagNameOnly(named).String()
-			op.Source.Identifier = "docker-image://" + refName
-			if _, ok := seen[refName]; ok {
-				return nil
-			}
-			seen[refName] = struct{}{}
-
-			eg.Go(func() error {
-				ref, dgst, dt, err := c.ResolveImageConfig(ctx, refName, sourceresolver.Opt{
-					ImageOpt: &sourceresolver.ResolveImageOpt{
-						Platform: &platform,
-					},
-				})
-				if err != nil {
+			} else if st != nil {
+				if err := n.Replace(ctx, *st); err != nil {
 					return err
 				}
-
-				var img dockerspec.DockerOCIImage
-				if err := json.Unmarshal(dt, &img); err != nil {
-					return err
-				}
-
-				m.Store(refName, &Image{
-					Ref:            ref,
-					Digest:         dgst,
-					DockerOCIImage: img,
-				})
+				n.image = img
 				return nil
-			})
+			}
 		}
+
+		named, err := reference.ParseNormalizedNamed(refName)
+		if err != nil {
+			return err
+		}
+		refName = reference.TagNameOnly(named).String()
+
+		ref, _, dt, err := c.ResolveImageConfig(ctx, refName, sourceresolver.Opt{
+			ImageOpt: &sourceresolver.ResolveImageOpt{
+				Platform: &platform,
+			},
+		})
+		if err != nil {
+			return err
+		}
+		op.Source.Identifier = "docker-image://" + ref
+
+		var img dockerspec.DockerOCIImage
+		if err := json.Unmarshal(dt, &img); err != nil {
+			return err
+		}
+		n.image = &img
 		return nil
-	}); err != nil {
-		return nil, err
 	}
-
-	if err := eg.Wait(); err != nil {
-		return nil, err
-	}
-
-	out := make(map[string]*Image)
-	for k, v := range m.Range {
-		out[k.(string)] = v.(*Image)
-	}
-	return out, nil
 }
 
 func resolveContexts(ctx context.Context, bc *dockerui.Client, gr *graph, tp ocispecs.Platform) error {
