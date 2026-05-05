@@ -101,7 +101,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 				),
 				llb.Readonly,
 			),
-			llb.AddMount("/nix/store", llb.Scratch(), llb.AsPersistentCacheDir("nix-frontend-store", llb.CacheMountShared)),
+			// llb.AddMount("/nix/store", llb.Scratch(), llb.AsPersistentCacheDir("nix-frontend-store", llb.CacheMountShared)),
 		}
 
 		for k, st := range inputs {
@@ -403,7 +403,7 @@ func resolveInputs(ctx context.Context, c client.Client, src *dockerui.Source, f
 		llb.WithCustomNamef("[dockerfile] resolving inputs for %s", src.Filename),
 		llb.Args(runArgs),
 		llb.AddMount("/src", *src.State),
-		llb.AddMount("/nix/store", llb.Scratch(), llb.AsPersistentCacheDir("nix-frontend-store", llb.CacheMountShared)),
+		// llb.AddMount("/nix/store", llb.Scratch(), llb.AsPersistentCacheDir("nix-frontend-store", llb.CacheMountShared)),
 	}
 
 	st := frontendImg.
