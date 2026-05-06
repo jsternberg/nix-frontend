@@ -15,7 +15,7 @@ rec {
   }:
   let
     defaultMounts = {
-      "/app".input = lib.llb.local "context";
+      "/app".input = lib.llb.context;
       "/root/.cache/go-build".type = "cache";
       "/go/pkg/mod".type = "cache";
     };

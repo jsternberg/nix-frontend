@@ -63,6 +63,40 @@ target "test-alpine" {
   target = test
 }
 
+target "test-golang-runner" {
+  name = "test-golang-runner-${tgt}"
+  inherits = ["_test_runner"]
+  dockerfile = "dockerfile.nix"
+  context = "test/golang"
+
+  matrix = {
+    tgt = ["default", "binaries", "test"]
+  }
+  target = tgt
+}
+
+target "test-golang" {
+  name = "test-golang-test-${test}"
+  contexts = {
+    target-default = "target:test-golang-runner-default"
+    target-binaries = "target:test-golang-runner-binaries"
+    target-test = "target:test-golang-runner-test"
+  }
+  dockerfile = "test/golang.Dockerfile"
+  output = ["type=cacheonly"]
+
+  matrix = {
+    test = [
+      "verify-binaries",
+      "verify-default"
+    ]
+  }
+  target = test
+}
+
 group "test" {
-  targets = ["test-alpine"]
+  targets = [
+    "test-alpine",
+    "test-golang"
+  ]
 }

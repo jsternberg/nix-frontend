@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -328,7 +327,7 @@ func resolvePath(fpath string) (inputPath, mountPath string, err error) {
 		inputPath, prefix = splitPath(inputPath)
 		mountPath = "/" + prefix + mountPath
 	}
-	return "", "", errors.New("index.json not found")
+	return "", "", fmt.Errorf("%s: index.json not found", fpath)
 }
 
 func resolveInput(op *pb.Op, fpath string) (pb.InputIndex, string, error) {
