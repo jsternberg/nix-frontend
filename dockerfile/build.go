@@ -298,7 +298,11 @@ func resolveImageConfigs(ctx context.Context, bc *dockerui.Client, c client.Clie
 }
 
 func resolveImageConfigFunc(ctx context.Context, n *graphNode, bc *dockerui.Client, c client.Client, platform ocispecs.Platform) func() error {
-	op := n.op.Op.(*pb.Op_Source)
+	op, ok := n.op.Op.(*pb.Op_Source)
+	if !ok {
+		return nil
+	}
+
 	refName, found := strings.CutPrefix(op.Source.Identifier, "docker-image://")
 	if !found {
 		return nil
