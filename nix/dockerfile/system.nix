@@ -1,36 +1,43 @@
 lib:
 
 let
-  fromFunc = f: config:
+  fromFunc =
+    f: config:
     let
-      impl = {
-        image,
-        installSystemPackages,
-        destdir ? "",
-      }: {
-        _type = "system";
-
-        setup = {
-          systemPackages ? [],
-          packages ? [],
+      impl =
+        {
+          image,
+          installSystemPackages,
+          destdir ? "",
         }:
-        let
-          step1 = installSystemPackages systemPackages image;
+        {
+          _type = "system";
 
-          # TODO: I want to reimplement this in a more robust way.
-          # Gonna keep this implementation for now.
-          byPrefix = builtins.groupBy (x: x.meta.installPrefix) packages;
-          installPackageFuncs = builtins.attrValues
-            (builtins.mapAttrs
-              (prefix: x: y: lib.llb.merge "${y}${destdir}${prefix}" x)
-              byPrefix);
-          installPackages = lib.optional (packages != [])
-            (x: builtins.foldl' (acc: f: f acc) x installPackageFuncs);
+          setup =
+            {
+              systemPackages ? [ ],
+              packages ? [ ],
+            }:
+            let
+              step1 = installSystemPackages systemPackages image;
 
-          step2 = installPackages step1;
-        in
-        step2;
-      };
+              # TODO: I want to reimplement this in a more robust way.
+              # Gonna keep this implementation for now.
+              byPrefix = builtins.groupBy (x: x.meta.installPrefix) packages;
+              installPackageFuncs = builtins.attrValues (
+                builtins.mapAttrs (
+                  prefix: x: y:
+                  lib.llb.merge "${y}${destdir}${prefix}" x
+                ) byPrefix
+              );
+              installPackages = lib.optional (packages != [ ]) (
+                x: builtins.foldl' (acc: f: f acc) x installPackageFuncs
+              );
+
+              step2 = installPackages step1;
+            in
+            step2;
+        };
     in
     impl (f config);
 in

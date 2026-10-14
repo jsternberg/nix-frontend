@@ -3,21 +3,25 @@
 _:
 
 {
-  targets = { std, ... }:
-  {
-    default = std.alpine.setup {
-      systemPackages = [ "curl" "ca-certificates" ];
-    };
+  targets =
+    { std, ... }:
+    {
+      default = std.alpine.setup {
+        systemPackages = [
+          "curl"
+          "ca-certificates"
+        ];
+      };
 
-    override =
-      let
-        alpine = std.alpine.override {
-          version = "3.20";
-          systemPackages = [ "curl" ];
-        };
-      in
+      override =
+        let
+          alpine = std.alpine.override {
+            version = "3.20";
+            systemPackages = [ "curl" ];
+          };
+        in
         alpine.setup {
           systemPackages = [ "wget" ];
         };
-  };
+    };
 }

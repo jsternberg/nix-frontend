@@ -1,20 +1,28 @@
-{ lib, config, std, ... }:
+{
+  lib,
+  config,
+  std,
+  ...
+}:
 
 let
   rust-version = "1.93.1";
 in
 rec {
-  alpine = std.alpine.override ({version, ...}: {
-    repository = "docker.io/library/rust";
-    version = "${rust-version}-alpine${version}";
-  });
+  alpine = std.alpine.override (
+    { version, ... }: {
+      repository = "docker.io/library/rust";
+      version = "${rust-version}-alpine${version}";
+    }
+  );
 
-  build = {
-    system ? alpine,
-    profile ? "release",
-  }:
+  build =
+    {
+      system ? alpine,
+      profile ? "release",
+    }:
     let
-      buildEnv = system.setup {};
+      buildEnv = system.setup { };
 
       app = (lib.llb.context).override {
         # Common to accidentally have the target directory from a local invocation
@@ -44,42 +52,63 @@ rec {
         "/cargo/registry".type = "cache";
       };
 
-      buildCommand = if profile == "release"
-        then
-          [ "cargo" "build" "--release" ]
+      buildCommand =
+        if profile == "release" then
+          [
+            "cargo"
+            "build"
+            "--release"
+          ]
         else if profile == "debug" then
-          [ "cargo" "build" ]
+          [
+            "cargo"
+            "build"
+          ]
         else
-          [ "cargo" "build" "--profile=${profile}" ];
+          [
+            "cargo"
+            "build"
+            "--profile=${profile}"
+          ];
 
       doBuild = lib.llb.run {
         inherit env workdir;
         mounts = defaultMounts // {
-          "/target/${profile}" = {};
+          "/target/${profile}" = { };
         };
       } buildCommand;
 
       buildStage = (doBuild buildEnv);
-      binaries = lib.llb.file null {
-        "/" = {
-          source = "${buildStage}/target/${profile}";
-          exclude = ["examples" "*.d"];
+      binaries =
+        lib.llb.file null {
+          "/" = {
+            source = "${buildStage}/target/${profile}";
+            exclude = [
+              "examples"
+              "*.d"
+            ];
+          };
+        }
+        // {
+          meta.installPrefix = "/bin";
         };
-      }
-      // { meta.installPrefix = "/bin"; };
 
-      doLockfileCommand = command: lib.llb.run {
-        inherit env workdir;
-        mounts = defaultMounts;
-      } [ "cargo" command ] buildEnv;
+      doLockfileCommand =
+        command:
+        lib.llb.run {
+          inherit env workdir;
+          mounts = defaultMounts;
+        } [ "cargo" command ] buildEnv;
 
-      lockfileStage = update: let
-        command = if update then "update" else "generate-lockfile";
-        result = doLockfileCommand command;
-      in
-      lib.llb.file null {
-        "Cargo.lock".source = "${result}/app/Cargo.lock";
-      };
+      lockfileStage =
+        update:
+        let
+          command = if update then "update" else "generate-lockfile";
+          result = doLockfileCommand command;
+        in
+        lib.llb.file null {
+          "Cargo.lock".source = "${result}/app/Cargo.lock";
+        };
 
       generate-lockfile = lockfileStage false;
       update-lockfile = lockfileStage true;

@@ -7,184 +7,236 @@
 
 let
   targetPlatform = {
-    inherit (config.target) arch os osVersion variant;
+    inherit (config.target)
+      arch
+      os
+      osVersion
+      variant
+      ;
   };
 
   hasPlatform = x: x != null && x ? platform;
 
-  mkOp = name: f:
-  let
-    mkDerivation = spec@{
-      platform ? targetPlatform,
-      meta ? null,
-      ...
-    }: derivation {
-      name = "llb-${name}";
-      inherit system;
-      builder = "/bin/mkop";
-      args = [ "$specPath" "$out" ];
+  mkOp =
+    name: f:
+    let
+      mkDerivation =
+        spec@{
+          platform ? targetPlatform,
+          meta ? null,
+          ...
+        }:
+        derivation {
+          name = "llb-${name}";
+          inherit system;
+          builder = "/bin/mkop";
+          args = [
+            "$specPath"
+            "$out"
+          ];
 
-      passAsFile = ["spec"];
-      spec = let
-        args = builtins.intersectAttrs (builtins.functionArgs f) spec;
-        finalSpec = (f args)
-          // (if meta != null then { inherit meta; } else {})
-          // { inherit platform; };
-      in
-      builtins.toJSON finalSpec;
-    }
-    // {
-      # Make available for inheriting.
-      inherit platform;
-    };
-  in
-  lib.makeOverridable mkDerivation;
+          passAsFile = [ "spec" ];
+          spec =
+            let
+              args = builtins.intersectAttrs (builtins.functionArgs f) spec;
+              finalSpec = (f args) // (if meta != null then { inherit meta; } else { }) // { inherit platform; };
+            in
+            builtins.toJSON finalSpec;
+        }
+        // {
+          # Make available for inheriting.
+          inherit platform;
+        };
+    in
+    lib.makeOverridable mkDerivation;
 
-  mkGitSource = mkOp "source" ({
-    url,
-    ref ? null,
-    subdir ? null,
-    keepGitDir ? false,
-    skipSubmodules ? false,
-    checksum ? null,
-  }:
-  let
-    refComponent = if ref != null || subdir != null
-      then "#${builtins.toString ref}" else "";
-    subdirComponent = if subdir != null
-      then ":${subdir}" else "";
-    id = builtins.concatStringsSep "" [ url refComponent subdirComponent ];
-  in
-  {
-    source = {
-      identifier = "git://${id}";
-      attrs = {
-        "git.fullurl" = url;
-        ${if keepGitDir then "git.keepgitdir" else null} = true;
-        ${if skipSubmodules then "git.skipsubmodules" else null} = true;
-        ${if checksum != null then "git.checksum" else null} = checksum;
+  mkGitSource = mkOp "source" (
+    {
+      url,
+      ref ? null,
+      subdir ? null,
+      keepGitDir ? false,
+      skipSubmodules ? false,
+      checksum ? null,
+    }:
+    let
+      refComponent = if ref != null || subdir != null then "#${builtins.toString ref}" else "";
+      subdirComponent = if subdir != null then ":${subdir}" else "";
+      id = builtins.concatStringsSep "" [
+        url
+        refComponent
+        subdirComponent
+      ];
+    in
+    {
+      source = {
+        identifier = "git://${id}";
+        attrs = {
+          "git.fullurl" = url;
+          ${if keepGitDir then "git.keepgitdir" else null} = true;
+          ${if skipSubmodules then "git.skipsubmodules" else null} = true;
+          ${if checksum != null then "git.checksum" else null} = checksum;
+        };
       };
-    };
-  });
+    }
+  );
 
-  mkSource = mkOp "source" ({
-    identifier,
-    attrs ? null,
-  }: {
-    source = {
-      inherit identifier;
-      ${if attrs != null then "attrs" else null} = builtins.mapAttrs (k: toAttrStr) attrs;
-    };
-  });
+  mkSource = mkOp "source" (
+    {
+      identifier,
+      attrs ? null,
+    }:
+    {
+      source = {
+        inherit identifier;
+        ${if attrs != null then "attrs" else null} = builtins.mapAttrs (k: toAttrStr) attrs;
+      };
+    }
+  );
 
-  mkMerge = mkOp "merge" ({
-    target,
-    inputs,
-  }: {
-    merge = { inherit target inputs; };
-  });
+  mkMerge = mkOp "merge" (
+    {
+      target,
+      inputs,
+    }:
+    {
+      merge = { inherit target inputs; };
+    }
+  );
 
-  mkFile = mkOp "file" ({
-    target,
-    locations,
-  }: {
-    file = { inherit target locations; };
-  });
+  mkFile = mkOp "file" (
+    {
+      target,
+      locations,
+    }:
+    {
+      file = { inherit target locations; };
+    }
+  );
 
-  mkExec = mkOp "exec" ({
-    command,
-    mounts,
-    workdir ? null,
-    env ? {},
-    meta ? {},
-  }: {
-    exec = {
-      command = if builtins.isString command
-        then [ "/bin/sh" "-c" command ]
-        else command;
-      inherit meta mounts;
-      workdir = if workdir != null
-        then workdir
-        else "/";
-      env = builtins.attrValues (builtins.mapAttrs (name: value: "${name}=${value}") env);
-    };
-  });
+  mkExec = mkOp "exec" (
+    {
+      command,
+      mounts,
+      workdir ? null,
+      env ? { },
+      meta ? { },
+    }:
+    {
+      exec = {
+        command =
+          if builtins.isString command then
+            [
+              "/bin/sh"
+              "-c"
+              command
+            ]
+          else
+            command;
+        inherit meta mounts;
+        workdir = if workdir != null then workdir else "/";
+        env = builtins.attrValues (builtins.mapAttrs (name: value: "${name}=${value}") env);
+      };
+    }
+  );
 
-  toAttrStr = v: if builtins.isString v
-    then v
-    else builtins.toJSON v;
+  toAttrStr = v: if builtins.isString v then v else builtins.toJSON v;
 in
 rec {
   context = mkSource {
     identifier = "context://${args.context or "context"}";
   };
 
-  contexts = builtins.mapAttrs (name: _: mkSource {
-    identifier = "context://${name}";
-  }) (args.contexts or {});
+  contexts = builtins.mapAttrs (
+    name: _:
+    mkSource {
+      identifier = "context://${name}";
+    }
+  ) (args.contexts or { });
 
-  local = name: mkSource {
-    identifier = "local://${name}";
-  };
+  local =
+    name:
+    mkSource {
+      identifier = "local://${name}";
+    };
 
-  git = urlOrOpts:
+  git =
+    urlOrOpts:
     let
-      opts = if builtins.isString urlOrOpts
-        then { url = urlOrOpts; }
-        else urlOrOpts;
+      opts = if builtins.isString urlOrOpts then { url = urlOrOpts; } else urlOrOpts;
     in
     mkGitSource opts;
 
-  image = name: mkSource {
-    identifier = "docker-image://${name}";
-  };
+  image =
+    name:
+    mkSource {
+      identifier = "docker-image://${name}";
+    };
 
-  merge = target: inputs: mkMerge {
-    inherit target inputs;
-    ${if hasPlatform target then "platform" else null} = target.platform;
-  };
+  merge =
+    target: inputs:
+    mkMerge {
+      inherit target inputs;
+      ${if hasPlatform target then "platform" else null} = target.platform;
+    };
 
-  file = target: locations: mkFile {
-    inherit target locations;
-    ${if hasPlatform target then "platform" else null} = target.platform;
-  };
+  file =
+    target: locations:
+    mkFile {
+      inherit target locations;
+      ${if hasPlatform target then "platform" else null} = target.platform;
+    };
 
-  run = optsOrCommand:
-    if (builtins.isList optsOrCommand || builtins.isString optsOrCommand)
-      then input: mkExec {
+  run =
+    optsOrCommand:
+    if (builtins.isList optsOrCommand || builtins.isString optsOrCommand) then
+      input:
+      mkExec {
         command = optsOrCommand;
         mounts."/".input = input;
         ${if hasPlatform input then "platform" else null} = input.platform;
       }
-      else command: input:
-        let
-          base = mkExec {
-            inherit command;
-            ${if hasPlatform input then "platform" else null} = input.platform;
-          };
-          overrideArgs = optsOrCommand // {
-            mounts = {
-              "/".input = input;
-            } // (optsOrCommand.mounts or {});
-          };
-        in
-        base.override overrideArgs;
+    else
+      command: input:
+      let
+        base = mkExec {
+          inherit command;
+          ${if hasPlatform input then "platform" else null} = input.platform;
+        };
+        overrideArgs = optsOrCommand // {
+          mounts = {
+            "/".input = input;
+          }
+          // (optsOrCommand.mounts or { });
+        };
+      in
+      base.override overrideArgs;
 
-  inputs = spec: derivation {
-    name = "llb-inputs.json";
-    inherit system;
-    builder = "/bin/readinputs";
-    args = [ "$specPath" "$out" ];
+  inputs =
+    spec:
+    derivation {
+      name = "llb-inputs.json";
+      inherit system;
+      builder = "/bin/readinputs";
+      args = [
+        "$specPath"
+        "$out"
+      ];
 
-    spec = builtins.toJSON spec;
-    passAsFile = ["spec"];
-  };
+      spec = builtins.toJSON spec;
+      passAsFile = [ "spec" ];
+    };
 
-  marshal = input: derivation {
-    name = "llb-def.json";
-    inherit system;
-    input = merge input [];
-    builder = "/bin/marshal";
-    args = [ "$input" "$out" ];
-  };
+  marshal =
+    input:
+    derivation {
+      name = "llb-def.json";
+      inherit system;
+      input = merge input [ ];
+      builder = "/bin/marshal";
+      args = [
+        "$input"
+        "$out"
+      ];
+    };
 }
