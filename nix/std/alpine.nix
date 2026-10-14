@@ -3,7 +3,7 @@
 let
   defaultConfig = {
     repository = "docker.io/library/alpine";
-    version = "3.21";
+    version = "latest";
   };
   cfg = defaultConfig // (config.alpine or { });
 

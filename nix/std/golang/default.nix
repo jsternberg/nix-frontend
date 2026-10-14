@@ -9,7 +9,7 @@ rec {
   alpine = std.alpine.override (
     { version, ... }: {
       repository = "docker.io/library/golang";
-      version = "1.25-alpine${version}";
+      version = if version == "latest" then "alpine" else "alpine${version}";
     }
   );
 
