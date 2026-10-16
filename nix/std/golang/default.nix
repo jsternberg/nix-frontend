@@ -28,8 +28,8 @@ rec {
         "/go/pkg/mod".type = "cache";
       };
 
-      useXX = cgo && lib.platform.isCross;
-      xx = (lib.llb.image "docker.io/tonistiigi/xx:1.9.0").override {
+      useXX = lib.platform.isCross;
+      xx = (lib.llb.image "docker.io/tonistiigi/xx:1.10.0").override {
         platform = config.build;
       };
 
@@ -38,7 +38,10 @@ rec {
       mkBuildEnv =
         platform:
         let
-          packages = lib.optional useXX (
+          step0 = system.override {
+            inherit platform;
+          };
+          packages = lib.optional cgo (
             x:
             x
             ++ [
@@ -48,7 +51,7 @@ rec {
               "pkgconfig"
             ]
           ) [ "git" ];
-          step1 = system.setup {
+          step1 = step0.setup {
             systemPackages = packages;
           };
           step2 = lib.optional useXX (
@@ -72,7 +75,7 @@ rec {
       ]
       ++ packages;
       doBuild = lib.llb.run {
-        env.CGO_ENABLED = if useXX then "1" else "0";
+        env.CGO_ENABLED = if cgo then "1" else "0";
         env.TARGETPLATFORM = targetPlatform;
         workdir = "/app";
 
@@ -92,7 +95,7 @@ rec {
       ]
       ++ testPackages;
       doTest = lib.llb.run {
-        env.CGO_ENABLED = if useXX then "1" else "0";
+        env.CGO_ENABLED = if cgo then "1" else "0";
         workdir = "/app";
 
         mounts = defaultMounts // {

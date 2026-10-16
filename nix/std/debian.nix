@@ -11,10 +11,13 @@ let
     {
       repository,
       version,
+      platform ? null,
       systemPackages ? [ ],
     }:
     {
-      image = lib.llb.image "${repository}:${version}";
+      image = lib.optional (platform != null) (x: x.override { inherit platform; }) (
+        lib.llb.image "${repository}:${version}"
+      );
 
       installSystemPackages =
         extraSystemPackages:
