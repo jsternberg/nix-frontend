@@ -63,7 +63,11 @@
         in
         final.override {
           # Set image entrypoint to /bin/frontend.
-          meta.image.entrypoint = [ "/bin/frontend" ];
+          meta.image = {
+            entrypoint = [ "/bin/frontend" ];
+            labels."moby.buildkit.frontend.caps" =
+              "moby.buildkit.frontend.inputs,moby.buildkit.frontend.contexts,moby.buildkit.frontend.subrequests";
+          };
         };
 
       default = frontend;

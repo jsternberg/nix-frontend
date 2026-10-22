@@ -11,7 +11,9 @@ import (
 
 	"github.com/jsternberg/nix-frontend/dockerfile"
 	"github.com/moby/buildkit/solver/pb"
+	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	"github.com/opencontainers/go-digest"
+	ocispecs "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/urfave/cli/v2"
 	"google.golang.org/protobuf/encoding/protojson"
 )
@@ -113,7 +115,18 @@ func convert(specs map[string]*Vertex, order []string) (*pb.Definition, error) {
 		v.Meta.Description["llb.source"] = string(src)
 
 		if v.Meta.Image != nil {
-			imageConfig, err := json.Marshal(v.Meta.Image)
+			imageSpec := &dockerspec.DockerOCIImageConfig{
+				ImageConfig: ocispecs.ImageConfig{
+					User:       v.Meta.Image.User,
+					Entrypoint: v.Meta.Image.Entrypoint,
+					Cmd:        v.Meta.Image.Cmd,
+					WorkingDir: v.Meta.Image.WorkingDir,
+				},
+			}
+			if v.Meta.Image.Labels != nil {
+				imageSpec.Labels = v.Meta.Image.Labels
+			}
+			imageConfig, err := json.Marshal(imageSpec)
 			if err != nil {
 				return nil, err
 			}
