@@ -130,12 +130,34 @@ rec {
 
       testSupportBinaries = lib.llb.merge null [ "${gotestsum}/out" ];
 
+      tidyCommand = [
+        "/bin/sh"
+        "/run/tidy"
+      ];
+      doTidy = lib.llb.run {
+        workdir = "/app";
+
+        mounts = defaultMounts // {
+          "/run".input = lib.llb.file null {
+            "/tidy".text = ''
+              #!/bin/sh
+              set -eo pipefail
+
+              go mod tidy
+              cp go.mod go.sum /out/
+            '';
+          };
+          "/out" = { };
+        };
+      } tidyCommand;
+
+      tidyStage = doTidy buildEnv;
+
       vendorCommand = [
         "/bin/sh"
         "/run/vendor"
       ];
       doVendor = lib.llb.run {
-        env.CGO_ENABLED = if useXX then "1" else "0";
         workdir = "/app";
 
         mounts = defaultMounts // {
@@ -155,12 +177,27 @@ rec {
 
       vendorStage = doVendor buildEnv;
 
-      validateVendorCommand = [
+      validateCommand = [
         "diff"
         "-u"
         "/a"
         "/b"
       ];
+
+      doValidateModfile = lib.llb.run {
+        mounts = {
+          "/a".input = (lib.llb.context).override {
+            attrs."local.followpaths" = [
+              "go.mod"
+              "go.sum"
+            ];
+          };
+          "/b".input = "${tidyStage}/out";
+        };
+      } validateCommand;
+
+      validateModfileStage = doValidateModfile (system.setup { });
+
       doValidateVendor = lib.llb.run {
         mounts = {
           "/a".input = (lib.llb.context).override {
@@ -172,7 +209,7 @@ rec {
           };
           "/b".input = "${vendorStage}/out";
         };
-      } validateVendorCommand;
+      } validateCommand;
 
       validateVendorStage = doValidateVendor (system.setup { });
 
@@ -185,11 +222,14 @@ rec {
     {
       inherit binaries test;
       default = binaries;
+
+      update-gomod = "${tidyStage}/out";
+      validate-gomod = validateModfileStage;
     }
     // (
       if vendor then
         {
-          vendor = "${vendorStage}/out";
+          update-vendor = "${vendorStage}/out";
           validate-vendor = validateVendorStage;
         }
       else
