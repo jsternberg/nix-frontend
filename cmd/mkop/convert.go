@@ -179,6 +179,7 @@ func convertFileOp(in *dockerfile.FileOp) (*pb.Op, error) {
 					Dest:            p,
 					Mode:            mode,
 					ExcludePatterns: entry.Exclude,
+					CreateDestPath:  true,
 				},
 			}
 		case entry.Text != "":

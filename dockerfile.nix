@@ -28,7 +28,12 @@
       # Only include binaries and test targets.
       # We do not use vendoring so there's no point in including
       # those targets here.
-      inherit (project) binaries test;
+      inherit (project)
+        binaries
+        test
+        update-gomod
+        validate-gomod
+        ;
 
       # Build for the frontend.
       # We use some custom steps because we make some manual strange changes
