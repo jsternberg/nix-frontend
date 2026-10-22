@@ -28,7 +28,12 @@
       # Only include binaries and test targets.
       # We do not use vendoring so there's no point in including
       # those targets here.
-      inherit (project) binaries test;
+      inherit (project)
+        binaries
+        test
+        update-gomod
+        validate-gomod
+        ;
 
       # Build for the frontend.
       # We use some custom steps because we make some manual strange changes
@@ -47,7 +52,7 @@
             "/nix/var/nix/dockerfile".source = "${context}/nix/dockerfile";
             "/nix/var/nix/std".source = "${context}/nix/std";
             "/bin".source = lib.llb.merge null [
-              "${context}/nix/bin"
+              "${context}/nix/bin/."
               project.binaries
             ];
             "/etc/nix/nix.conf".text = ''
@@ -58,7 +63,11 @@
         in
         final.override {
           # Set image entrypoint to /bin/frontend.
-          meta.image.entrypoint = [ "/bin/frontend" ];
+          meta.image = {
+            entrypoint = [ "/bin/frontend" ];
+            labels."moby.buildkit.frontend.caps" =
+              "moby.buildkit.frontend.inputs,moby.buildkit.frontend.contexts,moby.buildkit.frontend.subrequests";
+          };
         };
 
       default = frontend;

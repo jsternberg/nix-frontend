@@ -62,10 +62,11 @@ type Metadata struct {
 }
 
 type ImageConfig struct {
-	User       string   `json:"user,omitempty"`
-	Entrypoint []string `json:"entrypoint,omitempty"`
-	Cmd        []string `json:"command,omitempty"`
-	WorkingDir string   `json:"workdir,omitempty"`
+	User       string            `json:"user,omitempty"`
+	Entrypoint []string          `json:"entrypoint,omitempty"`
+	Cmd        []string          `json:"command,omitempty"`
+	WorkingDir string            `json:"workdir,omitempty"`
+	Labels     map[string]string `json:"labels,omitempty"`
 }
 
 func ReadOpSpec(fpath string) (*OpSpec, error) {

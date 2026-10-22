@@ -10,17 +10,41 @@ target "meta-helper" {
   tags = ["docker.io/jsternberg/dockerfile-nix:local"]
 }
 
+target "bootstrap-frontend" {
+  dockerfile = "build.Dockerfile"
+  target = "frontend"
+}
+
 target "_common" {
   args = {
     ALPINE_VERSION = ALPINE_VERSION
     GO_VERSION = GO_VERSION
   }
-  dockerfile = "build.Dockerfile"
+  contexts = {
+    "jsternberg/dockerfile-nix:local" = "target:bootstrap-frontend"
+  }
+  dockerfile = "dockerfile.nix"
 }
 
 target "frontend" {
   inherits = ["_common", "meta-helper"]
   target = "frontend"
+}
+
+target "validate-gomod" {
+  inherits = ["_common"]
+  target = "validate-gomod"
+  output = [{ type = "cacheonly" }]
+}
+
+target "update-gomod" {
+  inherits = ["_common"]
+  target = "update-gomod"
+  output = ["."]
+}
+
+group "lint" {
+  targets = ["validate-gomod"]
 }
 
 group "default" {

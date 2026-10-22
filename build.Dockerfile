@@ -10,7 +10,7 @@ RUN --mount=target=. \
     --mount=target=/root/.cache/go-build,type=cache <<EOT
   set -ex
   mkdir -p /out
-  go build -o /out/ ./cmd/...
+  CGO_ENABLED=0 go build -o /out/ ./cmd/...
 EOT
 
 FROM scratch AS binaries

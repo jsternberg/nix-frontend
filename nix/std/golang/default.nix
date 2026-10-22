@@ -46,6 +46,7 @@ rec {
             x
             ++ [
               "clang"
+              "gcc"
               "lld"
               "musl-dev"
               "pkgconfig"

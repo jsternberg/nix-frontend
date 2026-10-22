@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/url"
 	"path"
 	"path/filepath"
@@ -194,6 +195,9 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		}
 
 		r, err := res.SingleRef()
+		if err != nil {
+			return nil, err
+		}
 		return &dockerui.BuildResult{
 			Reference: r,
 			Image:     img,
@@ -277,6 +281,12 @@ func mergeImageConfig(into, from *dockerspec.DockerOCIImageConfig) {
 	}
 	if from.User != "" {
 		into.User = from.User
+	}
+	if from.Labels != nil {
+		if into.Labels == nil {
+			into.Labels = make(map[string]string)
+		}
+		maps.Copy(into.Labels, from.Labels)
 	}
 }
 
