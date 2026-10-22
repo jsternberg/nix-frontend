@@ -68,12 +68,23 @@ rec {
       testEnv = mkBuildEnv config.target;
 
       goBin = if useXX then "xx-go" else "go";
+      ldflags =
+        if cgo then
+          [
+            "-ldflags"
+            "-extldflags -static"
+            "-tags"
+            "seccomp netgo cgo static_build osusergo"
+          ]
+        else
+          [ ];
       buildCommand = [
         goBin
         "build"
         "-o"
         "/out"
       ]
+      ++ ldflags
       ++ packages;
       doBuild = lib.llb.run {
         env.CGO_ENABLED = if cgo then "1" else "0";
