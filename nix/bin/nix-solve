@@ -6,8 +6,9 @@ TARGET="targets.default"
 FILE="/etc/dockerfile.nix"
 OUTPUT="result"
 CONFIG_FILE=""
+SUBREQUEST=""
 
-OPTIONS=$(getopt -o t:f:o:c: --long target:,file:,output:,config-file: -- "$@")
+OPTIONS=$(getopt -o t:f:o:c: --long target:,file:,output:,config-file:,call: -- "$@")
 if [ $? -ne 0 ]; then
   echo "Incorrect options provided"
   exit 1
@@ -33,6 +34,10 @@ while true; do
     CONFIG_FILE="$2"
     shift 2
     ;;
+  --call)
+    SUBREQUEST="$2"
+    shift 2
+    ;;
   --)
     shift
     break
@@ -44,7 +49,12 @@ while true; do
   esac
 done
 
-cmd="nix-build <dockerfile> --argstr dockerfile ${FILE} -A config.build.targets.${TARGET} -o /tmp/result"
+attrPath="config.build.targets.${TARGET}"
+if [[ -n "${SUBREQUEST}" ]]; then
+  attrPath="config.subrequests.${SUBREQUEST}"
+fi
+
+cmd="nix-build <dockerfile> --argstr dockerfile ${FILE} -A ${attrPath} -o /tmp/result"
 if [[ -n "${CONFIG_FILE}" ]]; then
   cmd="${cmd} --argstr configuration ${CONFIG_FILE}"
 fi

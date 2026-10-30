@@ -1,3 +1,5 @@
+system:
+
 rec {
   optional = x: y: if x then y else (x: x);
 
@@ -12,5 +14,17 @@ rec {
     origRes
     // {
       override = newArgs: makeOverridable f (overrideWith newArgs);
+    };
+
+  writeFile =
+    name: text:
+    derivation {
+      inherit name system text;
+      builder = "/bin/sh";
+      args = [
+        "-c"
+        ''/bin/mv "$textPath" "$out"''
+      ];
+      passAsFile = [ "text" ];
     };
 }

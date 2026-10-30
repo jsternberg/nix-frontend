@@ -9,7 +9,7 @@ let
 
   buildArgs = args.build-arg or { };
 
-  lib = (import ./utils.nix) // {
+  lib = (import ./utils.nix system) // {
     llb = import ./llb {
       inherit lib system args;
       config = mergedConfig;
@@ -99,5 +99,11 @@ let
   };
 in
 {
-  config.build = finalConfig;
+  config = {
+    build = finalConfig;
+    subrequests = import ./subrequests.nix {
+      inherit lib;
+      config = finalConfig;
+    };
+  };
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/moby/buildkit/frontend/dockerui"
 	"github.com/moby/buildkit/frontend/gateway/client"
 	"github.com/moby/buildkit/frontend/subrequests/convertllb"
+	"github.com/moby/buildkit/frontend/subrequests/targets"
 	"github.com/moby/buildkit/solver/pb"
 	dockerspec "github.com/moby/docker-image-spec/specs-go/v1"
 	"github.com/opencontainers/go-digest"
@@ -79,22 +80,15 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		bp = platforms.DefaultSpec()
 	}
 
-	toSolveRequest := func(ctx context.Context, platform *ocispecs.Platform) (client.SolveRequest, *dockerspec.DockerOCIImage, error) {
-		var tp ocispecs.Platform
-		if platform != nil {
-			tp = *platform
-		} else {
-			tp = bp
-		}
-
+	toFrontendOutput := func(ctx context.Context, tp ocispecs.Platform, extraRunArgs ...string) ([]byte, error) {
 		configuration, err := json.Marshal(getConfiguration(bc, bp, tp))
 		if err != nil {
-			return client.SolveRequest{}, nil, err
+			return nil, err
 		}
 
 		runOpts := []llb.RunOption{
 			llb.WithCustomNamef("[dockerfile] resolving %s", src.Filename),
-			llb.Args(runArgs),
+			llb.Args(append(runArgs, extraRunArgs...)),
 			llb.AddMount("/src", *src.State),
 			llb.AddMount("/inputs", llb.Scratch().
 				File(
@@ -116,7 +110,7 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 
 		def, err := st.Marshal(ctx)
 		if err != nil {
-			return client.SolveRequest{}, nil, err
+			return nil, err
 		}
 
 		req := client.SolveRequest{
@@ -124,17 +118,28 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 		}
 		res, err := c.Solve(ctx, req)
 		if err != nil {
-			return client.SolveRequest{}, nil, err
+			return nil, err
 		}
 
 		ref, err := res.SingleRef()
 		if err != nil {
-			return client.SolveRequest{}, nil, err
+			return nil, err
 		}
 
-		in, err := ref.ReadFile(ctx, client.ReadRequest{
+		return ref.ReadFile(ctx, client.ReadRequest{
 			Filename: "dockerfile.json",
 		})
+	}
+
+	toSolveRequest := func(ctx context.Context, platform *ocispecs.Platform) (client.SolveRequest, *dockerspec.DockerOCIImage, error) {
+		var tp ocispecs.Platform
+		if platform != nil {
+			tp = *platform
+		} else {
+			tp = bp
+		}
+
+		in, err := toFrontendOutput(ctx, tp)
 		if err != nil {
 			return client.SolveRequest{}, nil, err
 		}
@@ -170,6 +175,18 @@ func Build(ctx context.Context, c client.Client) (*client.Result, error) {
 	}
 
 	if res, ok, err := bc.HandleSubrequest(ctx, dockerui.RequestHandler{
+		ListTargets: func(ctx context.Context) (*targets.List, error) {
+			dt, err := toFrontendOutput(ctx, bp, "--call=targets")
+			if err != nil {
+				return nil, err
+			}
+
+			list := &targets.List{}
+			if err := json.Unmarshal(dt, list); err != nil {
+				return nil, err
+			}
+			return list, nil
+		},
 		ConvertLLB: func(ctx context.Context) (*convertllb.Result, error) {
 			req, _, err := toSolveRequest(ctx, &bp)
 			if err != nil {
