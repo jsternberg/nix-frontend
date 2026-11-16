@@ -5,13 +5,34 @@
   ...
 }:
 
+let
+  defaultConfig = {
+    version = "latest";
+  };
+  cfg = defaultConfig // (config.golang or { });
+in
 rec {
-  alpine = std.alpine.override (
-    { version, ... }: {
-      repository = "docker.io/library/golang";
-      version = if version == "latest" then "alpine" else "alpine${version}";
-    }
-  );
+  extend =
+    system:
+    system.override (
+      args@{ repository, version, ... }:
+      if repository == "docker.io/library/alpine" then
+        args
+        // {
+          repository = "docker.io/library/golang";
+          version =
+            if version == "latest" then
+              if cfg.version == "latest" then "alpine" else "${cfg.version}-alpine"
+            else if cfg.version == "latest" then
+              "alpine${version}"
+            else
+              "${cfg.version}-alpine${version}";
+        }
+      else
+        builtins.abort "Unknown repository: ${repository}"
+    );
+
+  alpine = extend std.alpine;
 
   build =
     {

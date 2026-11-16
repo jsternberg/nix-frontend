@@ -9,8 +9,8 @@ let
 
   factoryFunc =
     {
-      repository ? cfg.repository,
-      version ? cfg.version,
+      repository,
+      version,
       platform ? null,
       systemPackages ? [ ],
     }:
@@ -35,4 +35,4 @@ let
         lib.optional (allSystemPackages != [ ]) impl;
     };
 in
-lib.system.makeFactory factoryFunc defaultConfig
+lib.system.makeFactory factoryFunc cfg

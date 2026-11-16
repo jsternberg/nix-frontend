@@ -1,19 +1,14 @@
 # syntax=docker.io/jsternberg/dockerfile-nix:local
 
 {
-  goVersion ? "1.25",
-  alpineVersion ? null,
+  goVersion ? "1.27",
+  alpineVersion ? "3.24",
 }:
 
 {
   config = {
-    # TODO: should be ok to set this to null to use the default
-    # but that's not presently possible.
-    ${if alpineVersion != null then "alpine.version" else null} = alpineVersion;
-
-    # TODO: currently this option is ignored and the golang
-    # builder doesn't respect the alpine version.
-    go.version = goVersion;
+    alpine.version = alpineVersion;
+    golang.version = goVersion;
   };
 
   # Define targets for this dockerfile.
